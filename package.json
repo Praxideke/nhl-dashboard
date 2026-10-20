@@ -1,0 +1,28 @@
+{
+  "name": "nhl-dashboard",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @nhl/api",
+    "dev:web": "npm run dev -w @nhl/web",
+    "build:web": "npm run build -w @nhl/web",
+    "build:server": "node esbuild.config.mjs",
+    "build:all": "npm run build:web && npm run build:server",
+    "electron:dev": "electron electron/main.cjs",
+    "package": "npm run build:all && electron-builder --config electron-builder.json"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "electron": "^44.9.2",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2"
+  },
+  "version": "1.0.0",
+  "description": "NHL Statistics Dashboard",
+  "author": "NHL Dashboard",
+  "main": "electron/main.cjs"
+}

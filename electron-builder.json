@@ -1,0 +1,44 @@
+{
+  "appId": "com.nhl.dashboard",
+  "productName": "NHL Stats",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "electron/**/*",
+    "dist-server/**/*",
+    "apps/web/dist/**/*",
+    "package.json"
+  ],
+  "asar": true,
+  "asarUnpack": [
+    "apps/web/dist/**/*",
+    "dist-server/**/*"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "NHL Stats",
+    "artifactName": "NHL-Stats-Setup-${version}.exe"
+  },
+  "portable": {
+    "artifactName": "NHL-Stats-Portable.exe"
+  },
+  "compression": "maximum",
+  "removePackageScripts": true
+}
