@@ -6,7 +6,7 @@
 
 Готовый установщик для Windows — в разделе [Releases](https://github.com/Praxideke/nhl-dashboard/releases/latest):
 
-1. Скачайте `NHL-Stats-Setup-1.0.0.exe`
+1. Скачайте `NHL-Stats-Setup-1.0.1.exe`
 2. Запустите установщик
 3. Ярлык **NHL Stats** появится на рабочем столе
 
