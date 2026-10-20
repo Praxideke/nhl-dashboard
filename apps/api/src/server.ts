@@ -179,11 +179,26 @@ app.get('/api/scores', async (req) => {
 
 app.get('/api/playoffs', async (req) => {
   const { season } = req.query as { season?: string };
-  const targetSeason = season ?? '20252026';
-  const year = targetSeason.slice(0, 4);
-  const cacheKey = `playoffs:${year}`;
+  const targetSeason = season ?? '20262027';
+  // Плей-офф проходит в год ОКОНЧАНИЯ сезона: '20262027' → '2027'
+  const endYearStr = targetSeason.slice(4, 8);
+  const yearNum = parseInt(endYearStr, 10);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  // Плей-офф начинается примерно в апреле. Если ещё не апрель года окончания — данных нет.
+  const playoffsStarted =
+    yearNum < currentYear ||
+    (yearNum === currentYear && currentMonth >= 4);
+
+  if (!playoffsStarted) {
+    return { series: [], notStarted: true, season: targetSeason };
+  }
+
+  const cacheKey = `playoffs:${endYearStr}`;
   return cached(cacheKey, 300_000, async () => {
-    const raw: any = await fetchPlayoffBracket(year);
+    const raw: any = await fetchPlayoffBracket(endYearStr);
     return raw;
   });
 });
@@ -367,4 +382,5 @@ try {
 
 await app.listen({ port: 3001, host: '0.0.0.0' });
 console.log('API is running on http://localhost:3001');
+
 

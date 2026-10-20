@@ -21,7 +21,7 @@ interface PlayoffSeries {
 }
 
 interface Props {
-  data: { series?: PlayoffSeries[] } | null
+  data: { series?: PlayoffSeries[]; notStarted?: boolean; season?: string } | null
   t: Translation
 }
 
@@ -97,6 +97,20 @@ function SeriesCard({ s }: { s: PlayoffSeries }) {
 
 export function PlayoffBracket({ data, t }: Props) {
   const isRu = t.locale === 'ru-RU'
+
+  if (data?.notStarted) {
+    return (
+      <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)' }}>
+        <div style={{ fontSize: 56, marginBottom: 16 }}>🏒</div>
+        <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 18, color: 'var(--text)' }}>
+          {isRu ? 'Плей-офф ещё не начался' : 'Playoffs have not started yet'}
+        </div>
+        <div style={{ fontSize: 13 }}>
+          {isRu ? 'Сетка появится после окончания регулярного чемпионата.' : 'The bracket will appear after the regular season ends.'}
+        </div>
+      </div>
+    )
+  }
 
   if (!data?.series?.length) {
     return (
@@ -205,3 +219,5 @@ export function PlayoffBracket({ data, t }: Props) {
     </div>
   )
 }
+
+
