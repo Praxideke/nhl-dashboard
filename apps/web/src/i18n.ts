@@ -245,7 +245,7 @@ export const T = {
     noGames: 'Нет игр',
     injuredReserve: 'Резерв травмированных',
     out: 'Вне игры',
-    dayToDay: 'День за днём',
+    dayToDay: 'Под вопросом',
     injured: 'Травма',
     playerStats: 'Статистика игрока',
     currentSeason: 'Текущий сезон',

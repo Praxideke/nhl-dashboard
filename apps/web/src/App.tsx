@@ -44,13 +44,11 @@ const SEASON_END_DATES: Record<string, string> = {
 const STORAGE_KEY = 'nhl-dashboard-settings'
 
 type ViewMode = 'standings' | 'playoffs' | 'leaders'
-type Theme = 'light' | 'dark'
 
 interface Settings {
   lang: Lang
   season: string
   view: ViewMode
-  theme: Theme
 }
 
 function loadSettings(): Settings {
@@ -66,11 +64,10 @@ function loadSettings(): Settings {
         lang: parsed.lang === 'en' ? 'en' : 'ru',
         season: typeof parsed.season === 'string' ? parsed.season : '20262027',
         view,
-        theme: parsed.theme === 'dark' ? 'dark' : 'light',
       }
     }
   } catch (e) {}
-  return { lang: 'ru', season: '20262027', view: 'standings', theme: 'light' }
+  return { lang: 'ru', season: '20262027', view: 'standings' }
 }
 
 function getDateOffset(days: number): string {
@@ -100,25 +97,17 @@ export default function App() {
   const [selectedSeason, setSelectedSeason] = useState<string>(initial.season)
   const [lang, setLang] = useState<Lang>(initial.lang)
   const [view, setView] = useState<ViewMode>(initial.view)
-  const [theme, setTheme] = useState<Theme>(initial.theme)
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null)
   const [selectedGameId, setSelectedGameId] = useState<number | null>(null)
   const [selectedLeaderPlayerId, setSelectedLeaderPlayerId] = useState<number | null>(null)
 
   const t = T[lang]
 
-  // Применяем тему к html
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    document.body.style.background = theme === 'dark' ? '#0f1115' : '#ffffff'
-  }, [theme])
-
-  // Сохраняем настройки
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ lang, season: selectedSeason, view, theme }))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ lang, season: selectedSeason, view }))
     } catch (e) {}
-  }, [lang, selectedSeason, view, theme])
+  }, [lang, selectedSeason, view])
 
   useEffect(() => {
     let cancelled = false
@@ -213,25 +202,12 @@ export default function App() {
       maxWidth: 1400,
       margin: '0 auto',
       color: 'var(--text)',
-      background: 'var(--bg)',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <h1 style={{ margin: 0, fontSize: 24 }}>{t.dashboard}</h1>
+        <h1 style={{ margin: 0, fontSize: 24, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{t.dashboard}</h1>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <button onClick={() => setLang('ru')} style={smallBtnStyle(lang === 'ru')}>RU</button>
           <button onClick={() => setLang('en')} style={smallBtnStyle(lang === 'en')}>EN</button>
-          <button
-            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-            title={theme === 'light' ? 'Dark mode' : 'Light mode'}
-            style={{
-              ...smallBtnStyle(false),
-              marginLeft: 8,
-              fontSize: 15,
-              padding: '3px 9px',
-            }}
-          >
-            {theme === 'light' ? '🌙' : '☀️'}
-          </button>
         </div>
       </div>
 
@@ -298,16 +274,16 @@ export default function App() {
         )}
       </div>
 
-      {error && <div style={{ color: '#c00', marginBottom: 12 }}>Error: {error}</div>}
+      {error && <div style={{ color: 'var(--loss)', marginBottom: 12 }}>Error: {error}</div>}
 
       {view === 'standings' && (
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
           <section>
-            <h2 style={{ marginTop: 0 }}>{t.standings}</h2>
+            <h2 style={{ marginTop: 0, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{t.standings}</h2>
             <StandingsTable rows={standings} t={t} onTeamClick={(abbrev) => setSelectedTeam(abbrev)} />
           </section>
           <section>
-            <h2 style={{ marginTop: 0 }}>{t.scores}</h2>
+            <h2 style={{ marginTop: 0, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{t.scores}</h2>
             <ScoresFeed
               games={games}
               centerDate={selectedDate ?? today}

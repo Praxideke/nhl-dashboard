@@ -107,8 +107,9 @@ function StatBlock({ label, value }: { label: string; value: string }) {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
-      padding: '8px 6px', backgroundColor: 'var(--card-bg-alt)',
-      borderRadius: 6, minWidth: 56,
+      padding: '8px 10px', backgroundColor: 'rgba(15, 20, 30, 0.5)',
+      border: '1px solid rgba(255,255,255,0.06)',
+      borderRadius: 6, minWidth: 64,
     }}>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2, textTransform: 'uppercase', fontWeight: 600 }}>
         {label}
@@ -126,7 +127,10 @@ function StatRow({
   if (!stats) return null
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, fontWeight: 700 }}>
+      <div style={{
+        fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase',
+        marginBottom: 6, fontWeight: 700, letterSpacing: '0.5px',
+      }}>
         {title}
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -159,7 +163,7 @@ function SeasonHistoryRow({ row, isG }: { row: SeasonRow; isG: boolean }) {
   const cell: React.CSSProperties = { padding: '6px 4px', fontSize: 12, color: 'var(--text)' }
   const cellNum: React.CSSProperties = { ...cell, textAlign: 'right' }
   return (
-    <tr style={{ borderBottom: '1px solid var(--border-light)' }}>
+    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
       <td style={{ ...cell, color: 'var(--text-muted)' }}>{formatSeason(row.season)}</td>
       <td style={{ ...cell, fontWeight: 500 }}>{row.team}</td>
       <td style={cellNum}>{fmt(s.gp)}</td>
@@ -216,6 +220,12 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
     return () => { document.body.style.overflow = prev }
   }, [])
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   const pos = data?.position
   const isG = isGoalie(pos)
   const featured = data?.featuredStats?.regularSeason?.subSeason
@@ -239,7 +249,28 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
 
   const metaLabelStyle: React.CSSProperties = {
     color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', fontWeight: 700,
+    letterSpacing: '0.4px', marginBottom: 2,
   }
+
+  const panelStyle: React.CSSProperties = {
+    backgroundColor: 'rgba(15, 20, 30, 0.45)',
+    backdropFilter: 'blur(6px)',
+    WebkitBackdropFilter: 'blur(6px)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 10,
+    padding: 14,
+  }
+
+  const thStyle: React.CSSProperties = {
+    padding: '6px 4px',
+    textAlign: 'left',
+    fontSize: 10,
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    fontWeight: 700,
+    letterSpacing: '0.4px',
+  }
+  const thRightStyle: React.CSSProperties = { ...thStyle, textAlign: 'right' }
 
   return (
     <>
@@ -247,40 +278,63 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
         onClick={onClose}
         style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'var(--overlay)', zIndex: 1100,
+          backgroundColor: 'var(--overlay)', zIndex: 1300,
+          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
         }}
       />
 
       <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: 'min(440px, 100vw)',
-        backgroundColor: 'var(--card-bg)', zIndex: 1101,
-        boxShadow: '-4px 0 20px var(--shadow)',
+        position: 'fixed',
+        top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: 'min(1000px, calc(100vw - 16px))',
+        maxHeight: 'calc(100vh - 16px)',
+        backgroundColor: '#0f1115',
+        backgroundImage: 'linear-gradient(180deg, rgba(15,17,21,0.45) 0%, rgba(15,17,21,0.8) 50%, rgba(15,17,21,0.92) 100%), url("/bg/main-bg.jpg")',
+        backgroundSize: 'cover, cover',
+        backgroundPosition: 'center, center',
+        backgroundRepeat: 'no-repeat, no-repeat',
+        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        zIndex: 1301,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
         <div style={{
-          padding: '16px 20px', backgroundColor: 'var(--header-bg)',
+          padding: '12px 20px',
+          backgroundColor: 'rgba(10, 30, 55, 0.7)',
+          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexShrink: 0,
         }}>
-          <h2 style={{ margin: 0, fontSize: 18, color: 'var(--header-text)' }}>{t.playerStats}</h2>
+          <h2 style={{ margin: 0, fontSize: 16, color: '#fff', fontWeight: 800 }}>{t.playerStats}</h2>
           <button
             onClick={onClose}
             style={{
-              border: 'none', background: 'transparent', fontSize: 24,
-              cursor: 'pointer', color: 'var(--header-text)', padding: '0 8px', lineHeight: 1,
+              border: 'none', background: 'rgba(255,255,255,0.1)', fontSize: 22,
+              cursor: 'pointer', color: '#fff',
+              width: 32, height: 32, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              lineHeight: 1,
             }}
           >
             ×
           </button>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '16px 20px' }}>
-          {loading && <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 20 }}>...</div>}
+        <div style={{
+          flex: 1, overflowY: 'auto', overscrollBehavior: 'contain',
+          padding: '16px 20px',
+        }}>
+          {loading && <div style={{ color: '#fff', textAlign: 'center', padding: 40 }}>...</div>}
           {error && <div style={{ color: 'var(--loss)', padding: 20 }}>{error}</div>}
 
           {data && (
             <>
-              <div style={{ display: 'flex', gap: 18, marginBottom: 20, alignItems: 'center' }}>
+              {/* Профиль */}
+              <div style={{ display: 'flex', gap: 20, marginBottom: 18, alignItems: 'center' }}>
                 {data.headshot && (
                   <img
                     src={data.headshot}
@@ -289,83 +343,97 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
                     height={120}
                     style={{
                       objectFit: 'cover', borderRadius: '50%',
-                      backgroundColor: 'var(--card-bg-alt)',
+                      backgroundColor: 'rgba(255,255,255,0.08)',
                       border: '3px solid var(--accent)', flexShrink: 0,
+                      boxShadow: '0 0 20px rgba(74, 158, 255, 0.4)',
                     }}
                   />
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 20, fontWeight: 'bold', color: 'var(--text)', lineHeight: 1.2 }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.2, textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
                     {data.firstName?.default} {data.lastName?.default}
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
                     {data.sweaterNumber ? `#${data.sweaterNumber} · ` : ''}
                     {pos} · {data.shootsCatches === 'L' ? 'L' : 'R'}
                   </div>
                   {data.currentTeamAbbrev && (
-                    <div style={{ fontSize: 12, color: 'var(--accent)', marginTop: 4, fontWeight: 600 }}>
-                      {data.currentTeamAbbrev}
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6, padding: '2px 8px', backgroundColor: 'rgba(74, 158, 255, 0.15)', borderRadius: 4 }}>
+                      <img
+                        src={`https://assets.nhle.com/logos/nhl/svg/${data.currentTeamAbbrev}_dark.svg`}
+                        alt="" width={20} height={20} style={{ objectFit: 'contain' }}
+                      />
+                      <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>
+                        {data.currentTeamAbbrev}
+                      </span>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 20, fontSize: 12, color: 'var(--text)' }}>
-                <div>
-                  <div style={metaLabelStyle}>{t.heightLabel}</div>
-                  <div>{heightCm ? `${heightCm} см` : '—'}</div>
-                </div>
-                <div>
-                  <div style={metaLabelStyle}>{t.weightLabel}</div>
-                  <div>{weightKg ? `${weightKg} кг` : '—'}</div>
-                </div>
-                <div>
-                  <div style={metaLabelStyle}>{t.ageLabel}</div>
-                  <div>{age ?? '—'}</div>
-                </div>
-                <div>
-                  <div style={metaLabelStyle}>{t.bornLabel}</div>
-                  <div>{birthDate ?? '—'}{birthCity ? `, ${birthCity}` : ''}</div>
-                </div>
-                <div>
-                  <div style={metaLabelStyle}>{t.countryLabel}</div>
-                  <div>{birthCountry ?? '—'}</div>
-                </div>
-                <div>
-                  <div style={metaLabelStyle}>{t.draftedLabel}</div>
-                  <div>{draftText}</div>
+              {/* Био-метаданные */}
+              <div style={{ ...panelStyle, marginBottom: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 13, color: 'var(--text)' }}>
+                  <div>
+                    <div style={metaLabelStyle}>{t.heightLabel}</div>
+                    <div>{heightCm ? `${heightCm} см` : '—'}</div>
+                  </div>
+                  <div>
+                    <div style={metaLabelStyle}>{t.weightLabel}</div>
+                    <div>{weightKg ? `${weightKg} кг` : '—'}</div>
+                  </div>
+                  <div>
+                    <div style={metaLabelStyle}>{t.ageLabel}</div>
+                    <div>{age ?? '—'}</div>
+                  </div>
+                  <div>
+                    <div style={metaLabelStyle}>{t.bornLabel}</div>
+                    <div>{birthDate ?? '—'}{birthCity ? `, ${birthCity}` : ''}</div>
+                  </div>
+                  <div>
+                    <div style={metaLabelStyle}>{t.countryLabel}</div>
+                    <div>{birthCountry ?? '—'}</div>
+                  </div>
+                  <div>
+                    <div style={metaLabelStyle}>{t.draftedLabel}</div>
+                    <div>{draftText}</div>
+                  </div>
                 </div>
               </div>
 
-              <StatRow title={t.currentSeason} stats={current} isG={isG} t={t} />
-              <StatRow title={t.careerTotals} stats={careerLine} isG={isG} t={t} />
+              {/* Статистика */}
+              <div style={{ ...panelStyle, marginBottom: 14 }}>
+                <StatRow title={t.currentSeason} stats={current} isG={isG} t={t} />
+                <StatRow title={t.careerTotals} stats={careerLine} isG={isG} t={t} />
+              </div>
 
+              {/* История клубов */}
               {seasonHistory.length > 0 && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, fontWeight: 700 }}>
+                <div style={panelStyle}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, fontWeight: 700, letterSpacing: '0.5px' }}>
                     {t.teamHistory}
                   </div>
-                  <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 4 }}>
+                  <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead>
-                        <tr style={{ backgroundColor: 'var(--card-bg-alt)', borderBottom: '1px solid var(--border)' }}>
-                          <th style={{ padding: '6px 4px', textAlign: 'left', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.seasonWord}</th>
-                          <th style={{ padding: '6px 4px', textAlign: 'left', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.teamCol}</th>
-                          <th style={{ padding: '6px 4px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.gp}</th>
+                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                          <th style={thStyle}>{t.seasonWord}</th>
+                          <th style={thStyle}>{t.teamCol}</th>
+                          <th style={thRightStyle}>{t.gp}</th>
                           {isG ? (
                             <>
-                              <th style={{ padding: '6px 4px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.winsStat}</th>
-                              <th style={{ padding: '6px 4px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.lossesStat}</th>
-                              <th style={{ padding: '6px 4px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.otLossesStat}</th>
-                              <th style={{ padding: '6px 4px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.gaaStat}</th>
-                              <th style={{ padding: '6px 4px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.savePctgStat}</th>
+                              <th style={thRightStyle}>{t.winsStat}</th>
+                              <th style={thRightStyle}>{t.lossesStat}</th>
+                              <th style={thRightStyle}>{t.otLossesStat}</th>
+                              <th style={thRightStyle}>{t.gaaStat}</th>
+                              <th style={thRightStyle}>{t.savePctgStat}</th>
                             </>
                           ) : (
                             <>
-                              <th style={{ padding: '6px 4px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.goalsCol}</th>
-                              <th style={{ padding: '6px 4px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.assistsCol}</th>
-                              <th style={{ padding: '6px 4px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.pointsCol}</th>
-                              <th style={{ padding: '6px 4px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.plusMinusCol}</th>
+                              <th style={thRightStyle}>{t.goalsCol}</th>
+                              <th style={thRightStyle}>{t.assistsCol}</th>
+                              <th style={thRightStyle}>{t.pointsCol}</th>
+                              <th style={thRightStyle}>{t.plusMinusCol}</th>
                             </>
                           )}
                         </tr>
@@ -390,4 +458,3 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
     </>
   )
 }
-

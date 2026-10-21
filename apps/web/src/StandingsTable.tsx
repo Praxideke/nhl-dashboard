@@ -23,6 +23,17 @@ interface Props {
   onTeamClick?: (abbrev: string) => void
 }
 
+// Используем _dark.svg (яркая версия для тёмных фонов) вместо _light.svg
+function teamLogoUrl(logo?: string, abbrev?: string): string {
+  if (logo) {
+    return logo.replace('_light', '_dark')
+  }
+  if (abbrev) {
+    return `https://assets.nhle.com/logos/nhl/svg/${abbrev}_dark.svg`
+  }
+  return ''
+}
+
 const sortByPoints = (a: StandingRow, b: StandingRow) =>
   b.points - a.points ||
   b.pointPctg - a.pointPctg ||
@@ -167,6 +178,8 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                 overflowX: 'auto',
                 border: '1px solid var(--border)',
                 borderRadius: 4,
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)',
               }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
@@ -213,8 +226,8 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                           }}
                         >
                           <td style={{ padding: '8px 6px', textAlign: 'center', color: 'var(--text-muted)' }}>{i + 1}</td>
-                          <td style={{ padding: '0 6px', height: 40 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <td style={{ padding: '0 6px', height: 48 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                               {r.clinchIndicator && (
                                 <span
                                   title={
@@ -236,11 +249,15 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                                 </span>
                               )}
                               <img
-                                src={r.team.logo}
+                                src={teamLogoUrl(r.team.logo, r.team.abbrev)}
                                 alt=""
-                                width={36}
-                                height={36}
-                                style={{ objectFit: 'contain', flexShrink: 0 }}
+                                width={44}
+                                height={44}
+                                style={{
+                                  objectFit: 'contain',
+                                  flexShrink: 0,
+                                  filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.5))',
+                                }}
                               />
                               <span style={{ fontWeight: 500, color: 'var(--text)' }}>{r.team.name}</span>
                             </div>
