@@ -43,9 +43,52 @@ interface RawStandingsResponse {
   standings: RawStanding[];
 }
 
+function gameSortKey(g: any): string {
+  if (g.gameDate) return g.gameDate;
+  if (g.startTimeUTC) return g.startTimeUTC;
+  return '';
+}
+
+/**
+ * Пересчитываем текущую серию из последних 5 игр.
+ * OTL считается как поражение в серии (не прерывает её).
+ * Если серия достигла длины last5 (все 5 одного типа) — берём count из API
+ * (на случай если серия длиннее 5, например W7).
+ */
+function calculateStreak(
+  last5: ('W' | 'L' | 'OTL')[],
+  apiStreakCode: string,
+  apiStreakCount: number
+): string {
+  if (last5.length === 0) return '—';
+
+  const latest = last5[last5.length - 1];
+  const isWin = latest === 'W';
+
+  let count = 0;
+  for (let i = last5.length - 1; i >= 0; i--) {
+    const r = last5[i];
+    if (isWin && r === 'W') count++;
+    else if (!isWin && (r === 'L' || r === 'OTL')) count++;
+    else break;
+  }
+
+  // Если вся last5 — одинаковая серия, вероятно она длиннее → берём count из API
+  if (count === last5.length) {
+    const apiIsWin = apiStreakCode === 'W';
+    const apiIsLoss = apiStreakCode === 'L' || apiStreakCode === 'OT';
+    if ((isWin && apiIsWin) || (!isWin && apiIsLoss)) {
+      return `${isWin ? 'W' : 'L'}${apiStreakCount}`;
+    }
+  }
+
+  return `${isWin ? 'W' : 'L'}${count}`;
+}
+
 export function normalizeStandings(
   raw: RawStandingsResponse,
-  last5Map: Record<string, any[]> = {}
+  last5Map: Record<string, any[]> = {},
+  nextGameMap: Record<string, any | null> = {}
 ): StandingRow[] {
   return raw.standings.map((s, index) => {
     const abbrev = s.teamAbbrev.default;
@@ -65,6 +108,24 @@ export function normalizeStandings(
         return 'OTL';
       return 'L';
     });
+
+    let nextGame: StandingRow['nextGame'] | undefined = undefined;
+    const rawNext = nextGameMap[abbrev];
+    if (rawNext) {
+      const isHome = rawNext.homeTeam.abbrev === abbrev;
+      const opp = isHome ? rawNext.awayTeam : rawNext.homeTeam;
+      nextGame = {
+        date: gameSortKey(rawNext).slice(0, 10),
+        startTimeUTC: rawNext.startTimeUTC,
+        isHome,
+        opponentAbbrev: opp.abbrev,
+        opponentName:
+          opp.commonName?.default ||
+          opp.name?.default ||
+          opp.city ||
+          opp.abbrev,
+      };
+    }
 
     const team: TeamInfo = {
       id: 0,
@@ -89,7 +150,11 @@ export function normalizeStandings(
       goalFor: s.goalFor,
       goalAgainst: s.goalAgainst,
       goalDiff: s.goalDifferential,
-      streak: `${s.streakCode}${s.streakCount}`,
+      streak: calculateStreak(
+        last5 as ('W' | 'L' | 'OTL')[],
+        s.streakCode,
+        s.streakCount
+      ),
       regulationWins: s.regulationWins,
       regulationPlusOtWins: s.regulationPlusOtWins,
       homeRecord: `${s.homeWins}-${s.homeLosses}-${s.homeOtLosses}`,
@@ -99,6 +164,7 @@ export function normalizeStandings(
       last5: last5 as ('W' | 'L' | 'OTL')[],
       last5Games: teamGames,
       clinchIndicator: s.clinchIndicator || undefined,
+      nextGame,
     };
   });
 }

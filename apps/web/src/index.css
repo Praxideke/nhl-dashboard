@@ -3,7 +3,6 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
 
 :root {
   --bg: #0f1115;
-  --app-bg-image: url('/bg/main-bg.jpg');
   --text: #e4e6eb;
   --text-secondary: #b0b3b8;
   --text-muted: #8a8d91;
@@ -20,8 +19,6 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
   --accent-text: #ffffff;
   --score-bg: rgba(35, 39, 48, 0.7);
   --score-text: #ffffff;
-  --badge-bg: rgba(42, 45, 51, 0.7);
-  --badge-text: #b0b3b8;
   --shadow: rgba(0,0,0,0.5);
   --overlay: rgba(0,0,0,0.7);
   --win: #4ade80;
@@ -31,28 +28,26 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
   --strength-text: #b0b3b8;
   --injury-bg: #4a1f1f;
   --injury-text: #f87171;
-  --gold: #fbbf24;
-  --silver: #d1d5db;
-  --bronze: #f59e0b;
-  --tab-inactive: #8a8d91;
-  --wildcard-bg: rgba(21, 42, 61, 0.6);
   --tooltip-bg: #232730;
   --tooltip-border: #35383f;
-  --podium-gold-bg: linear-gradient(180deg, rgba(42, 36, 16, 0.8) 0%, rgba(31, 28, 15, 0.8) 100%);
-  --podium-silver-bg: linear-gradient(180deg, rgba(35, 39, 48, 0.8) 0%, rgba(31, 34, 40, 0.8) 100%);
-  --podium-bronze-bg: linear-gradient(180deg, rgba(42, 31, 20, 0.8) 0%, rgba(31, 24, 16, 0.8) 100%);
-  --podium-gold-border: rgba(106, 82, 32, 0.8);
-  --podium-silver-border: rgba(74, 74, 74, 0.8);
-  --podium-bronze-border: rgba(106, 69, 32, 0.8);
 }
 
 html {
   background-color: #0f1115;
+  color-scheme: dark;
+}
+
+/* Фон — фиксированный псевдоэлемент */
+html::before {
+  content: '';
+  position: fixed;
+  inset: 0;
   background-image: url('/bg/main-bg.jpg');
   background-size: cover;
   background-position: center;
-  background-attachment: fixed;
-  color-scheme: dark;
+  background-repeat: no-repeat;
+  z-index: -1;
+  pointer-events: none;
 }
 
 body {
@@ -62,30 +57,78 @@ body {
   min-height: 100vh;
 }
 
+/* Строки таблицы */
+.standings-row {
+  position: relative;
+  z-index: 1;
+}
+.standings-row:hover {
+  z-index: 20;
+  background-color: rgba(40, 50, 70, 0.75) !important;
+}
+
+/* Тултипы */
+.cell-tooltip {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: help;
+}
+.cell-tooltip > .tooltip-content {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  background: var(--tooltip-bg);
+  border: 1px solid var(--tooltip-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.12s ease, visibility 0.12s ease;
+}
+.cell-tooltip:hover > .tooltip-content {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0.1s;
+}
+
+.last5-dot {
+  position: relative;
+  cursor: pointer;
+}
+.last5-dot > .tooltip-content {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -30px;
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  background: var(--tooltip-bg);
+  border: 1px solid var(--tooltip-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.12s ease, visibility 0.12s ease;
+}
+.last5-dot:hover > .tooltip-content {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0.1s;
+}
+
 button {
   background: var(--card-bg);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 4px;
   font-family: inherit;
-  transition: background 0.15s;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
-
-button:hover {
-  background: var(--card-bg-hover);
-}
-
+button:hover { background: var(--card-bg-hover); }
 a { color: var(--link); }
-
-input, select {
-  background: var(--card-bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
+input, select { background: var(--card-bg); color: var(--text); border: 1px solid var(--border); }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }

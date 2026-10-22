@@ -42,7 +42,6 @@ const SEASON_END_DATES: Record<string, string> = {
 }
 
 const STORAGE_KEY = 'nhl-dashboard-settings'
-
 type ViewMode = 'standings' | 'playoffs' | 'leaders'
 
 interface Settings {
@@ -86,7 +85,6 @@ function currentSeasonFromToday(): string {
 
 export default function App() {
   const initial = loadSettings()
-
   const [standings, setStandings] = useState<StandingRow[]>([])
   const [games, setGames] = useState<GameRow[]>([])
   const [playoffs, setPlayoffs] = useState<any>(null)
@@ -100,7 +98,6 @@ export default function App() {
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null)
   const [selectedGameId, setSelectedGameId] = useState<number | null>(null)
   const [selectedLeaderPlayerId, setSelectedLeaderPlayerId] = useState<number | null>(null)
-
   const t = T[lang]
 
   useEffect(() => {
@@ -111,14 +108,12 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
-
     async function load() {
       try {
         if (view === 'leaders') {
           setError(null)
           return
         }
-
         const promises: Promise<any>[] = [
           getStandings(selectedDate ?? undefined, selectedSeason),
           getScores(selectedDate ?? undefined)
@@ -126,10 +121,8 @@ export default function App() {
         if (view === 'playoffs') {
           promises.push(getPlayoffs(selectedSeason))
         }
-
         const results = await Promise.all(promises)
         if (cancelled) return
-
         setStandings(results[0])
         setGames(results[1])
         if (view === 'playoffs') {
@@ -140,7 +133,6 @@ export default function App() {
         if (!cancelled) setError((e as Error).message)
       }
     }
-
     load()
     const t2 = setInterval(load, 60_000)
     return () => { cancelled = true; clearInterval(t2) }
@@ -241,7 +233,6 @@ export default function App() {
             ))}
           </select>
         </div>
-
         {view === 'standings' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <label htmlFor="date-picker" style={{ fontWeight: 600, fontSize: 13 }}>{t.dateLabel}:</label>
@@ -256,7 +247,6 @@ export default function App() {
               }}
               style={{ padding: '5px 8px', fontSize: 13, borderRadius: 4 }}
             />
-
             {isCurrentSeason && (
               <>
                 <button onClick={() => goToDay(yesterday)} style={dayBtnStyle(isYesterday)}>

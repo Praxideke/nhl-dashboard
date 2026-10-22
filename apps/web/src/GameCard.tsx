@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Translation } from './i18n'
 import { getGame } from './api'
+import { PlayerCard } from './PlayerCard'
 
 interface Props {
   gameId: number | string
@@ -113,7 +114,6 @@ function PlayerHeadshot({
       />
     )
   }
-
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
@@ -128,15 +128,21 @@ function PlayerHeadshot({
 }
 
 function StarCard({
-  star, rank, t, season,
-}: { star: any; rank: number; t: Translation; season: number | string }) {
+  star, rank, t, season, onClick,
+}: { star: any; rank: number; t: Translation; season: number | string; onClick: () => void }) {
   const label = rank === 1 ? t.star1 : rank === 2 ? t.star2 : t.star3
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      flex: 1, padding: '10px 8px',
-      backgroundColor: 'var(--card-bg-alt)', borderRadius: 10, minWidth: 0,
-    }}>
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        flex: 1, padding: '10px 8px',
+        backgroundColor: 'var(--card-bg-alt)', borderRadius: 10, minWidth: 0,
+        cursor: 'pointer', transition: 'background 0.15s',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--card-bg-alt)' }}
+    >
       <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: 6, letterSpacing: '0.4px' }}>
         {label}
       </div>
@@ -168,8 +174,7 @@ function StrengthBadge({ code, t }: { code: string; t: Translation }) {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        position: 'relative',
-        display: 'inline-block',
+        position: 'relative', display: 'inline-block',
         fontSize: 10, padding: '1px 5px',
         backgroundColor: 'var(--strength-bg)', borderRadius: 3,
         color: 'var(--strength-text)', fontWeight: 600,
@@ -195,6 +200,7 @@ export function GameCard({ gameId, t, onClose }: Props) {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedPlayerId, setSelectedPlayerId] = useState<number | string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -206,21 +212,30 @@ export function GameCard({ gameId, t, onClose }: Props) {
     return () => { cancelled = true }
   }, [gameId])
 
+  // Жесткая блокировка прокрутки body и html
   useEffect(() => {
-    const prev = document.body.style.overflow
+    const prevBody = document.body.style.overflow
+    const prevHtml = document.documentElement.style.overflow
     document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
+    document.documentElement.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prevBody
+      document.documentElement.style.overflow = prevHtml
+    }
   }, [])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && !selectedPlayerId) onClose() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+  }, [onClose, selectedPlayerId])
 
   const away: TeamSide = {
     abbrev: abbrevOf(data?.awayTeam?.abbrev),
-    name: data?.awayTeam?.commonName?.default ?? data?.awayTeam?.name?.default,
+    // Склеиваем город и прозвище (например, Philadelphia + Flyers)
+    name: data?.awayTeam?.placeName?.default && data?.awayTeam?.commonName?.default
+      ? `${data.awayTeam.placeName.default} ${data.awayTeam.commonName.default}`
+      : (data?.awayTeam?.commonName?.default ?? data?.awayTeam?.name?.default),
     logo: data?.awayTeam?.logo,
     score: data?.awayTeam?.score,
     sog: data?.awayTeam?.sog,
@@ -228,7 +243,10 @@ export function GameCard({ gameId, t, onClose }: Props) {
   }
   const home: TeamSide = {
     abbrev: abbrevOf(data?.homeTeam?.abbrev),
-    name: data?.homeTeam?.commonName?.default ?? data?.homeTeam?.name?.default,
+    // Склеиваем город и прозвище (например, Buffalo + Sabres)
+    name: data?.homeTeam?.placeName?.default && data?.homeTeam?.commonName?.default
+      ? `${data.homeTeam.placeName.default} ${data.homeTeam.commonName.default}`
+      : (data?.homeTeam?.commonName?.default ?? data?.homeTeam?.name?.default),
     logo: data?.homeTeam?.logo,
     score: data?.homeTeam?.score,
     sog: data?.homeTeam?.sog,
@@ -237,7 +255,6 @@ export function GameCard({ gameId, t, onClose }: Props) {
 
   const finished = data?.gameState === 'FINAL' || data?.gameState === 'OFF'
   const started = finished || data?.gameState === 'LIVE' || data?.gameState === 'CRIT'
-
   const goalsByPeriod: any[] = data?.summary?.scoring ?? []
   const threeStars: any[] = data?.threeStars ?? []
   const gameDate = data?.gameDate
@@ -261,7 +278,6 @@ export function GameCard({ gameId, t, onClose }: Props) {
     fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, fontWeight: 700, letterSpacing: '0.4px',
   }
 
-  // Доли бросков для бара
   const awaySog = away.sog ?? 0
   const homeSog = home.sog ?? 0
   const totalSog = awaySog + homeSog
@@ -281,19 +297,23 @@ export function GameCard({ gameId, t, onClose }: Props) {
         borderBottom: gi < total - 1 ? '1px solid var(--border-light)' : 'none',
         color: 'var(--text)',
       }}>
-        <PlayerHeadshot
-          playerId={playerId}
-          teamAbbrev={teamAbbrevStr}
-          name={playerName}
-          season={season}
-          size={64}
-        />
+        <div
+          onClick={() => playerId && setSelectedPlayerId(playerId)}
+          style={{ cursor: playerId ? 'pointer' : 'default', flexShrink: 0 }}
+        >
+          <PlayerHeadshot playerId={playerId} teamAbbrev={teamAbbrevStr} name={playerName} season={season} size={64} />
+        </div>
         <div style={{ flexShrink: 0, maxWidth: 140, minWidth: 0 }}>
-          <div style={{
-            fontSize: 15, fontWeight: 700, color: 'var(--text)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            lineHeight: 1.25,
-          }}>
+          <div
+            onClick={() => playerId && setSelectedPlayerId(playerId)}
+            style={{
+              fontSize: 15, fontWeight: 700, color: 'var(--text)',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              lineHeight: 1.25, cursor: playerId ? 'pointer' : 'default',
+            }}
+            onMouseEnter={(e) => { if (playerId) e.currentTarget.style.color = 'var(--accent)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text)' }}
+          >
             {playerName}
           </div>
           <div style={{
@@ -312,31 +332,17 @@ export function GameCard({ gameId, t, onClose }: Props) {
             )}
           </div>
         </div>
-
         <div style={{ flex: 1, minWidth: 8 }} />
-
         {teamAbbrevStr && (
           <img
             src={teamLogoUrl(teamAbbrevStr)}
             alt=""
             title={teamAbbrevStr}
-            style={{
-              width: 80,
-              height: 80,
-              objectFit: 'contain',
-              opacity: 0.15,
-              flexShrink: 0,
-              filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.25))',
-            }}
+            style={{ width: 80, height: 80, objectFit: 'contain', opacity: 0.15, flexShrink: 0, filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.25))' }}
           />
         )}
-
         <div style={{ flex: 1, minWidth: 8 }} />
-
-        <span style={{
-          fontSize: 18, fontWeight: 'bold', color: 'var(--accent)',
-          fontVariantNumeric: 'tabular-nums', flexShrink: 0, minWidth: 48, textAlign: 'right',
-        }}>
+        <span style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--accent)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, minWidth: 48, textAlign: 'right' }}>
           {g.awayScore}–{g.homeScore}
         </span>
       </div>
@@ -346,10 +352,7 @@ export function GameCard({ gameId, t, onClose }: Props) {
   const renderPeriodCard = (period: any, keyPrefix: string) => (
     <div
       key={`${keyPrefix}-${period.periodDescriptor?.number ?? 'x'}-${period.periodDescriptor?.periodType ?? 'REG'}`}
-      style={{
-        backgroundColor: 'rgba(15, 20, 30, 0.45)', borderRadius: 10, padding: '10px 14px',
-        border: '1px solid rgba(255,255,255,0.06)',
-      }}
+      style={{ backgroundColor: 'rgba(15, 20, 30, 0.45)', borderRadius: 10, padding: '10px 14px', border: '1px solid rgba(255,255,255,0.06)' }}
     >
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
         {periodLabel(period.periodDescriptor?.number, period.periodDescriptor?.periodType, t)}
@@ -371,7 +374,6 @@ export function GameCard({ gameId, t, onClose }: Props) {
           backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
         }}
       />
-
       <div style={{
         position: 'fixed',
         top: '50%', left: '50%',
@@ -391,8 +393,7 @@ export function GameCard({ gameId, t, onClose }: Props) {
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
         <div style={{
-          padding: '10px 18px',
-          backgroundColor: 'rgba(10, 30, 55, 0.7)',
+          padding: '10px 18px', backgroundColor: 'rgba(10, 30, 55, 0.7)',
           backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
           borderBottom: '1px solid rgba(255,255,255,0.08)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -412,52 +413,24 @@ export function GameCard({ gameId, t, onClose }: Props) {
             ×
           </button>
         </div>
-
-        <div style={{
-          flex: 1, overflowY: 'auto', overscrollBehavior: 'contain',
-          padding: '12px 20px',
-        }}>
+        <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '12px 20px' }}>
           {loading && <div style={{ color: '#fff', textAlign: 'center', padding: 40 }}>...</div>}
           {error && <div style={{ color: 'var(--loss)', padding: 20 }}>{error}</div>}
-
           {data && (
             <>
               <div style={{
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                textAlign: 'center',
-                marginBottom: 10,
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 6,
+                fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', marginBottom: 10,
+                display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: 6,
               }}>
-                {gameDate && (
-                  <span>
-                    {new Date(gameDate + 'T12:00:00Z').toLocaleDateString(t.locale, {
-                      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-                    })}
-                  </span>
-                )}
+                {gameDate && <span>{new Date(gameDate + 'T12:00:00Z').toLocaleDateString(t.locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>}
                 {startTime && !started && (
                   <>
                     <span style={{ opacity: 0.5 }}>·</span>
                     <span>{new Date(startTime).toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' })}</span>
                   </>
                 )}
-                {venue && (
-                  <>
-                    <span style={{ opacity: 0.5 }}>·</span>
-                    <span>{venue}</span>
-                  </>
-                )}
-                {attendance !== undefined && (
-                  <>
-                    <span style={{ opacity: 0.5 }}>·</span>
-                    <span>{attendance.toLocaleString(t.locale)}</span>
-                  </>
-                )}
+                {venue && <><span style={{ opacity: 0.5 }}>·</span><span>{venue}</span></>}
+                {attendance !== undefined && <><span style={{ opacity: 0.5 }}>·</span><span>{attendance.toLocaleString(t.locale)}</span></>}
                 <span style={{ opacity: 0.5 }}>·</span>
                 <span style={{
                   fontWeight: 600,
@@ -466,22 +439,21 @@ export function GameCard({ gameId, t, onClose }: Props) {
                   {statusText(data, t)}
                 </span>
               </div>
-
+              
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24,
                 padding: '12px 16px', marginBottom: 12,
-                backgroundColor: 'rgba(15, 20, 30, 0.45)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: 10,
+                backgroundColor: 'rgba(15, 20, 30, 0.45)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10,
               }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
-                  <img src={away.logo} alt="" width={64} height={64} style={{ objectFit: 'contain' }} />
-                  <div style={{ fontSize: 17, fontWeight: 'bold', color: 'var(--text)' }}>{away.abbrev}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+                  {/* Увеличенный логотип с 64 до 100 */}
+                  <img src={away.logo} alt="" width={100} height={100} style={{ objectFit: 'contain' }} />
+                  <div style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--text)', textAlign: 'center', lineHeight: 1.2 }}>{away.name}</div>
                   {away.record && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{away.record}</div>}
                 </div>
-
+                
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 12px', minWidth: 150 }}>
-                  <div style={{ fontSize: 42, fontWeight: 'bold', color: 'var(--accent)', letterSpacing: '1px', lineHeight: 1 }}>
+                  <div style={{ fontSize: 48, fontWeight: 'bold', color: 'var(--accent)', letterSpacing: '1px', lineHeight: 1 }}>
                     {started ? `${away.score ?? 0} – ${home.score ?? 0}` : '— : —'}
                   </div>
                   {!started && startTime && (
@@ -491,101 +463,60 @@ export function GameCard({ gameId, t, onClose }: Props) {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
-                  <img src={home.logo} alt="" width={64} height={64} style={{ objectFit: 'contain' }} />
-                  <div style={{ fontSize: 17, fontWeight: 'bold', color: 'var(--text)' }}>{home.abbrev}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+                  {/* Увеличенный логотип с 64 до 100 */}
+                  <img src={home.logo} alt="" width={100} height={100} style={{ objectFit: 'contain' }} />
+                  <div style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--text)', textAlign: 'center', lineHeight: 1.2 }}>{home.name}</div>
                   {home.record && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{home.record}</div>}
                 </div>
               </div>
 
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: threeStars.length > 0 ? 'minmax(0, 1fr) minmax(0, 2fr)' : '1fr',
-                gap: 12,
-                marginBottom: 12,
-              }}>
+              <div style={{ display: 'grid', gridTemplateColumns: threeStars.length > 0 ? 'minmax(0, 1fr) minmax(0, 2fr)' : '1fr', gap: 12, marginBottom: 12 }}>
                 {(away.sog !== undefined || home.sog !== undefined) && (
                   <div>
                     <div style={sectionTitle}>{t.shotsLabel}</div>
-                    <div style={{
-                      padding: '12px 14px',
-                      backgroundColor: 'rgba(15, 20, 30, 0.45)',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                      borderRadius: 8,
-                    }}>
+                    <div style={{ padding: '12px 14px', backgroundColor: 'rgba(15, 20, 30, 0.45)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <span style={{
-                          fontWeight: 'bold', color: 'var(--text)', fontSize: 16,
-                          minWidth: 28, textAlign: 'left', fontVariantNumeric: 'tabular-nums',
-                        }}>
-                          {awaySog}
-                        </span>
-                        <div style={{
-                          flex: 1,
-                          height: 10,
-                          backgroundColor: 'rgba(255,255,255,0.08)',
-                          borderRadius: 5,
-                          display: 'flex',
-                          overflow: 'hidden',
-                        }}>
-                          <div style={{
-                            width: `${awayPct}%`,
-                            backgroundColor: 'var(--accent)',
-                            transition: 'width 0.3s',
-                          }} />
-                          <div style={{
-                            width: `${homePct}%`,
-                            backgroundColor: '#e25c5c',
-                            transition: 'width 0.3s',
-                          }} />
+                        <span style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: 16, minWidth: 28, textAlign: 'left', fontVariantNumeric: 'tabular-nums' }}>{awaySog}</span>
+                        <div style={{ flex: 1, height: 10, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 5, display: 'flex', overflow: 'hidden' }}>
+                          <div style={{ width: `${awayPct}%`, backgroundColor: 'var(--accent)' }} />
+                          <div style={{ width: `${homePct}%`, backgroundColor: '#e25c5c' }} />
                         </div>
-                        <span style={{
-                          fontWeight: 'bold', color: 'var(--text)', fontSize: 16,
-                          minWidth: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-                        }}>
-                          {homeSog}
-                        </span>
+                        <span style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: 16, minWidth: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{homeSog}</span>
                       </div>
-                      <div style={{
-                        display: 'flex', justifyContent: 'space-between',
-                        fontSize: 10, color: 'var(--text-muted)',
-                        marginTop: 6, textTransform: 'uppercase',
-                        letterSpacing: '0.4px', fontWeight: 600,
-                      }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.4px', fontWeight: 600 }}>
                         <span>{away.abbrev}</span>
                         <span>{home.abbrev}</span>
                       </div>
                     </div>
                   </div>
                 )}
-
                 {threeStars.length > 0 && (
                   <div>
                     <div style={sectionTitle}>{t.threeStars}</div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       {threeStars.map((s: any) => (
-                        <StarCard key={s.star} star={s} rank={s.star} t={t} season={season} />
+                        <StarCard
+                          key={s.star}
+                          star={s}
+                          rank={s.star}
+                          t={t}
+                          season={season}
+                          onClick={() => s.playerId && setSelectedPlayerId(s.playerId)}
+                        />
                       ))}
                     </div>
                   </div>
                 )}
               </div>
-
               {goalsByPeriod.length > 0 && (
                 <div>
                   <div style={sectionTitle}>{t.goalScorers}</div>
-
                   {regularPeriods.length > 0 && (
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: `repeat(${regularPeriods.length}, minmax(0, 1fr))`,
-                      gap: 10,
-                      marginBottom: extraPeriods.length > 0 ? 10 : 0,
-                    }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${regularPeriods.length}, minmax(0, 1fr))`, gap: 10, marginBottom: extraPeriods.length > 0 ? 10 : 0 }}>
                       {regularPeriods.map((p: any) => renderPeriodCard(p, 'reg'))}
                     </div>
                   )}
-
                   {extraPeriods.length > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
                       {extraPeriods.map((p: any) => (
@@ -597,7 +528,6 @@ export function GameCard({ gameId, t, onClose }: Props) {
                   )}
                 </div>
               )}
-
               {!started && (
                 <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, padding: '12px 0' }}>
                   {t.gameNotStarted}
@@ -607,6 +537,13 @@ export function GameCard({ gameId, t, onClose }: Props) {
           )}
         </div>
       </div>
+      {selectedPlayerId && (
+        <PlayerCard
+          playerId={selectedPlayerId}
+          t={t}
+          onClose={() => setSelectedPlayerId(null)}
+        />
+      )}
     </>
   )
 }

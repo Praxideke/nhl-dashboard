@@ -10,12 +10,24 @@ const DIVISIONS = {
   Western: ['Central', 'Pacific'],
 } as const
 
-interface TooltipState {
-  x: number
-  y: number
-  game: any
-  result: 'W' | 'L' | 'OTL'
-}
+const COL_WIDTHS_PCT = [
+  '4%',
+  '23%',
+  '3.5%',
+  '3.5%',
+  '3.5%',
+  '4%',
+  '5.5%',
+  '3.5%',
+  '4%',
+  '4%',
+  '5%',
+  '6.5%',
+  '6.5%',
+  '8%',
+  '5%',
+  '6.5%',
+]
 
 interface Props {
   rows: StandingRow[]
@@ -23,7 +35,6 @@ interface Props {
   onTeamClick?: (abbrev: string) => void
 }
 
-// Используем _dark.svg (яркая версия для тёмных фонов) вместо _light.svg
 function teamLogoUrl(logo?: string, abbrev?: string): string {
   if (logo) {
     return logo.replace('_light', '_dark')
@@ -44,7 +55,6 @@ const sortByPoints = (a: StandingRow, b: StandingRow) =>
 
 export function StandingsTable({ rows, t, onTeamClick }: Props) {
   const [mode, setMode] = useState<ViewMode>('Division')
-  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
   const modeLabels: Record<ViewMode, string> = {
     'Division': t.modeDivision,
@@ -125,7 +135,7 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
 
   const thStyle: React.CSSProperties = {
     padding: '10px 6px',
-    fontSize: '12px',
+    fontSize: 12,
     fontWeight: 'bold',
     textTransform: 'uppercase',
     color: 'var(--header-text)',
@@ -133,9 +143,15 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
     textAlign: 'center',
     whiteSpace: 'nowrap',
     cursor: 'help',
+    letterSpacing: '0.3px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   }
   const thLeftStyle = { ...thStyle, textAlign: 'left' as const }
-  const tdCenter: React.CSSProperties = { padding: '8px 6px', textAlign: 'center', color: 'var(--text)' }
+  const thPtsStyle: React.CSSProperties = {
+    ...thStyle,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  }
 
   return (
     <div>
@@ -166,7 +182,7 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
           return (
             <div key={idx}>
               <h3 style={{
-                margin: '0 0 8px 0',
+                margin: '0 0 10px 0',
                 fontSize: 13,
                 color: 'var(--text)',
                 textTransform: 'uppercase',
@@ -174,14 +190,19 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
               }}>
                 {group.title}
               </h3>
-              <div style={{
-                overflowX: 'auto',
-                border: '1px solid var(--border)',
-                borderRadius: 4,
-                backdropFilter: 'blur(6px)',
-                WebkitBackdropFilter: 'blur(6px)',
-              }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+
+              <div style={{ overflow: 'visible' }}>
+                <table style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  fontSize: 15,
+                  tableLayout: 'fixed',
+                  borderRadius: 8,
+                  overflow: 'hidden',
+                }}>
+                  <colgroup>
+                    {COL_WIDTHS_PCT.map((w, i) => <col key={i} style={{ width: w }} />)}
+                  </colgroup>
                   <thead>
                     <tr>
                       <th style={thStyle} title={t.tipPos}>{t.pos}</th>
@@ -190,44 +211,61 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                       <th style={thStyle} title={t.tipW}>{t.wCol}</th>
                       <th style={thStyle} title={t.tipL}>{t.lCol}</th>
                       <th style={thStyle} title={t.tipOTL}>{t.otlCol}</th>
-                      <th style={thStyle} title={t.tipPTS}>{t.ptsCol}</th>
+                      <th style={thPtsStyle} title={t.tipPTS}>{t.ptsCol}</th>
                       <th style={thStyle} title={t.tipRW}>{t.rwCol}</th>
-                      <th style={thStyle} title={t.tipROW}>{t.rowCol}</th>
                       <th style={thStyle} title={t.tipGF}>{t.gfCol}</th>
                       <th style={thStyle} title={t.tipGA}>{t.gaCol}</th>
+                      <th style={thStyle} title={t.tipDIFF}>{t.diffCol}</th>
                       <th style={thStyle} title={t.tipHome}>{t.homeCol}</th>
                       <th style={thStyle} title={t.tipRoad}>{t.roadCol}</th>
                       <th style={thStyle} title={t.tipLast5}>{t.last5Col}</th>
                       <th style={thStyle} title={t.tipStreak}>{t.streakCol}</th>
+                      <th style={thStyle} title={t.tipNext}>{t.nextCol}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {group.data.map((r, i) => {
                       const isPlayoffSpot = isWildCard && i < 2
-                      const bg = isPlayoffSpot
-                        ? 'var(--wildcard-bg)'
-                        : (i % 2 === 0 ? 'var(--card-bg)' : 'var(--card-bg-alt)')
+                      const baseBg = isPlayoffSpot
+                        ? 'rgba(21, 42, 61, 0.75)'
+                        : (i % 2 === 0 ? 'rgba(20, 25, 35, 0.55)' : 'rgba(25, 30, 42, 0.55)')
+
+                      const diffColor = r.goalDiff > 0
+                        ? 'var(--win)'
+                        : r.goalDiff < 0
+                          ? 'var(--loss)'
+                          : 'var(--text-muted)'
+
+                      const streakColor = r.streak.startsWith('W')
+                        ? 'var(--win)'
+                        : r.streak.startsWith('L')
+                          ? 'var(--loss)'
+                          : '#f0a500'
 
                       return (
                         <tr
                           key={r.team.abbrev}
+                          className="standings-row"
                           onClick={() => onTeamClick?.(r.team.abbrev)}
                           style={{
-                            backgroundColor: bg,
-                            borderBottom: '1px solid var(--border-light)',
-                            borderLeft: isPlayoffSpot ? '3px solid var(--accent)' : '3px solid transparent',
+                            backgroundColor: baseBg,
                             cursor: onTeamClick ? 'pointer' : 'default',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (onTeamClick) e.currentTarget.style.backgroundColor = 'var(--card-bg-hover)'
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = bg
+                            borderBottom: '1px solid rgba(255,255,255,0.05)',
                           }}
                         >
-                          <td style={{ padding: '8px 6px', textAlign: 'center', color: 'var(--text-muted)' }}>{i + 1}</td>
-                          <td style={{ padding: '0 6px', height: 48 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <td style={{
+                            padding: '0 4px',
+                            textAlign: 'center',
+                            color: 'var(--text-muted)',
+                            fontWeight: 600,
+                            borderLeft: isPlayoffSpot ? '3px solid var(--accent)' : '3px solid transparent',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {i + 1}
+                          </td>
+
+                          <td style={{ padding: '0 6px', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                               {r.clinchIndicator && (
                                 <span
                                   title={
@@ -243,6 +281,7 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                                     textTransform: 'lowercase',
                                     cursor: 'help',
                                     minWidth: 12,
+                                    flexShrink: 0,
                                   }}
                                 >
                                   {r.clinchIndicator}
@@ -251,33 +290,59 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                               <img
                                 src={teamLogoUrl(r.team.logo, r.team.abbrev)}
                                 alt=""
-                                width={44}
-                                height={44}
+                                width={56}
+                                height={56}
                                 style={{
                                   objectFit: 'contain',
                                   flexShrink: 0,
-                                  filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.35)) drop-shadow(0 1px 2px rgba(0,0,0,0.5))',
+                                  filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.3)) drop-shadow(0 1px 2px rgba(0,0,0,0.5))',
                                 }}
                               />
-                              <span style={{ fontWeight: 500, color: 'var(--text)' }}>{r.team.name}</span>
+                              <span style={{
+                                fontWeight: 500,
+                                color: 'var(--text)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}>
+                                {r.team.name}
+                              </span>
                             </div>
                           </td>
-                          <td style={tdCenter}>{r.gamesPlayed}</td>
-                          <td style={tdCenter}>{r.wins}</td>
-                          <td style={tdCenter}>{r.losses}</td>
-                          <td style={tdCenter}>{r.otLosses}</td>
-                          <td style={{ ...tdCenter, fontWeight: 'bold' }}>{r.points}</td>
-                          <td style={tdCenter}>{r.regulationWins}</td>
-                          <td style={tdCenter}>{r.regulationPlusOtWins}</td>
-                          <td style={tdCenter}>{r.goalFor}</td>
-                          <td style={tdCenter}>{r.goalAgainst}</td>
-                          <td style={tdCenter}>{r.homeRecord}</td>
-                          <td style={tdCenter}>{r.roadRecord}</td>
-                          <td style={tdCenter}>
-                            <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+
+                          <td style={{ padding: '0 4px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap' }}>{r.gamesPlayed}</td>
+                          <td style={{ padding: '0 4px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap' }}>{r.wins}</td>
+                          <td style={{ padding: '0 4px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap' }}>{r.losses}</td>
+                          <td style={{ padding: '0 4px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap' }}>{r.otLosses}</td>
+
+                          <td style={{
+                            padding: '0 4px',
+                            textAlign: 'center',
+                            fontWeight: 'bold',
+                            fontSize: 16,
+                            color: 'var(--text)',
+                            backgroundColor: 'rgba(255,255,255,0.12)',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {r.points}
+                          </td>
+
+                          <td style={{ padding: '0 4px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap' }}>{r.regulationWins}</td>
+                          <td style={{ padding: '0 4px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap' }}>{r.goalFor}</td>
+                          <td style={{ padding: '0 4px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap' }}>{r.goalAgainst}</td>
+
+                          <td style={{ padding: '0 4px', textAlign: 'center', color: diffColor, fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                            {r.goalDiff > 0 ? `+${r.goalDiff}` : r.goalDiff}
+                          </td>
+
+                          <td style={{ padding: '0 4px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap' }}>{r.homeRecord}</td>
+                          <td style={{ padding: '0 4px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap' }}>{r.roadRecord}</td>
+
+                          <td style={{ padding: '0 4px' }}>
+                            <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
                               {(r.last5 || []).map((res, j) => {
                                 let bgDot = 'transparent'
-                                let border = '2px solid #d0021b'
+                                let border: string = '2px solid #d0021b'
                                 if (res === 'W') { bgDot = '#4a90e2'; border = 'none' }
                                 else if (res === 'L') { bgDot = '#d0021b'; border = 'none' }
 
@@ -286,28 +351,171 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                                 return (
                                   <div
                                     key={j}
+                                    className="last5-dot"
                                     style={{
-                                      width: 12, height: 12, borderRadius: '50%',
-                                      backgroundColor: bgDot, border: border,
-                                      cursor: game ? 'pointer' : 'default'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.stopPropagation()
-                                      if (game) {
-                                        setTooltip({ x: e.clientX, y: e.clientY, game, result: res })
-                                      }
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.stopPropagation()
-                                      setTooltip(null)
+                                      width: 10, height: 10, borderRadius: '50%',
+                                      backgroundColor: bgDot, border,
+                                      flexShrink: 0,
                                     }}
                                     onClick={(e) => e.stopPropagation()}
-                                  />
+                                  >
+                                    {game && (() => {
+                                      const awayAbbrev = game.awayTeam?.abbrev ?? ''
+                                      const homeAbbrev = game.homeTeam?.abbrev ?? ''
+                                      const awayScore = game.awayTeam?.score ?? 0
+                                      const homeScore = game.homeTeam?.score ?? 0
+                                      const dateStr = new Date(
+                                        (game.gameDate || game.startTimeUTC) + (game.gameDate ? 'T12:00:00Z' : '')
+                                      ).toLocaleDateString(t.locale, { weekday: 'short', month: 'short', day: 'numeric' })
+                                      const resultLabel = res === 'W' ? t.win : res === 'L' ? t.loss : t.otLoss
+                                      const resultColor = res === 'W' ? 'var(--win)' : res === 'L' ? 'var(--loss)' : '#f0a500'
+
+                                      return (
+                                        <div
+                                          className="tooltip-content"
+                                          style={{
+                                            padding: '14px 20px',
+                                            minWidth: 230,
+                                            textAlign: 'center',
+                                          }}
+                                        >
+                                          <div style={{
+                                            fontSize: 14,
+                                            fontWeight: 700,
+                                            marginBottom: 10,
+                                            paddingBottom: 8,
+                                            borderBottom: '1px solid var(--border-medium)',
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            gap: 8,
+                                          }}>
+                                            <span style={{ color: resultColor }}>
+                                              {resultLabel}
+                                            </span>
+                                            <span style={{ color: 'var(--text-secondary)' }}>
+                                              {dateStr}
+                                            </span>
+                                          </div>
+
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                                            <img
+                                              src={`https://assets.nhle.com/logos/nhl/svg/${awayAbbrev}_dark.svg`}
+                                              alt={awayAbbrev}
+                                              width={44}
+                                              height={44}
+                                              style={{ objectFit: 'contain' }}
+                                            />
+                                            <span style={{ fontSize: 30, fontWeight: 800, color: 'var(--text)', fontFamily: 'sans-serif' }}>
+                                              {awayScore}
+                                            </span>
+                                            <span style={{ color: 'var(--text-muted)', fontSize: 20 }}>:</span>
+                                            <span style={{ fontSize: 30, fontWeight: 800, color: 'var(--text)', fontFamily: 'sans-serif' }}>
+                                              {homeScore}
+                                            </span>
+                                            <img
+                                              src={`https://assets.nhle.com/logos/nhl/svg/${homeAbbrev}_dark.svg`}
+                                              alt={homeAbbrev}
+                                              width={44}
+                                              height={44}
+                                              style={{ objectFit: 'contain' }}
+                                            />
+                                          </div>
+                                        </div>
+                                      )
+                                    })()}
+                                  </div>
                                 )
                               })}
                             </div>
                           </td>
-                          <td style={tdCenter}>{r.streak}</td>
+
+                          <td style={{ padding: '0 4px', textAlign: 'center', color: streakColor, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            {r.streak}
+                          </td>
+
+                          <td style={{ padding: '0 4px' }}>
+                            <div
+                              className="cell-tooltip"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {r.nextGame ? (
+                                <img
+                                  src={`https://assets.nhle.com/logos/nhl/svg/${r.nextGame.opponentAbbrev}_dark.svg`}
+                                  alt={r.nextGame.opponentAbbrev}
+                                  width={56}
+                                  height={56}
+                                  style={{
+                                    objectFit: 'contain',
+                                    opacity: 0.95,
+                                    filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.3)) drop-shadow(0 1px 2px rgba(0,0,0,0.5))',
+                                  }}
+                                  onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.2' }}
+                                />
+                              ) : (
+                                <span style={{
+                                  color: 'var(--text-muted)',
+                                  fontSize: 18,
+                                  fontWeight: 300,
+                                  lineHeight: 1,
+                                }}>
+                                  —
+                                </span>
+                              )}
+
+                              {r.nextGame && (() => {
+                                const ng = r.nextGame
+                                const ourAbbrev = r.team.abbrev
+                                const oppAbbrev = ng.opponentAbbrev
+                                const awayAbbrev = ng.isHome ? oppAbbrev : ourAbbrev
+                                const homeAbbrev = ng.isHome ? ourAbbrev : oppAbbrev
+                                const dateStr = ng.date
+                                  ? new Date(ng.date + 'T12:00:00Z').toLocaleDateString(t.locale, {
+                                      weekday: 'short', month: 'short', day: 'numeric'
+                                    })
+                                  : ''
+
+                                return (
+                                  <div
+                                    className="tooltip-content"
+                                    style={{
+                                      padding: '14px 20px',
+                                      minWidth: 220,
+                                      textAlign: 'center',
+                                    }}
+                                  >
+                                    <div style={{
+                                      fontSize: 14,
+                                      fontWeight: 600,
+                                      color: 'var(--text-secondary)',
+                                      marginBottom: 10,
+                                      paddingBottom: 8,
+                                      borderBottom: '1px solid var(--border-medium)',
+                                    }}>
+                                      {dateStr}
+                                    </div>
+
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                                      <img
+                                        src={`https://assets.nhle.com/logos/nhl/svg/${awayAbbrev}_dark.svg`}
+                                        alt={awayAbbrev}
+                                        width={64}
+                                        height={64}
+                                        style={{ objectFit: 'contain' }}
+                                      />
+                                      <span style={{ fontSize: 22, color: 'var(--text-muted)', fontWeight: 600 }}>@</span>
+                                      <img
+                                        src={`https://assets.nhle.com/logos/nhl/svg/${homeAbbrev}_dark.svg`}
+                                        alt={homeAbbrev}
+                                        width={64}
+                                        height={64}
+                                        style={{ objectFit: 'contain' }}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          </td>
                         </tr>
                       )
                     })}
@@ -319,6 +527,7 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
         })}
       </div>
 
+      {/* Легенда */}
       <div style={{
         marginTop: 40,
         paddingTop: 20,
@@ -337,59 +546,17 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
           <div><strong style={{ color: 'var(--text)' }}>{t.otlCol}</strong> — {t.tipOTL}</div>
           <div><strong style={{ color: 'var(--text)' }}>{t.ptsCol}</strong> — {t.tipPTS}</div>
           <div><strong style={{ color: 'var(--text)' }}>{t.rwCol}</strong> — {t.tipRW}</div>
-          <div><strong style={{ color: 'var(--text)' }}>{t.rowCol}</strong> — {t.tipROW}</div>
           <div><strong style={{ color: 'var(--text)' }}>{t.gfCol}</strong> — {t.tipGF}</div>
           <div><strong style={{ color: 'var(--text)' }}>{t.gaCol}</strong> — {t.tipGA}</div>
+          <div><strong style={{ color: 'var(--text)' }}>{t.diffCol}</strong> — {t.tipDIFF}</div>
           <div><strong style={{ color: 'var(--text)' }}>{t.homeCol}</strong> — {t.tipHome}</div>
           <div><strong style={{ color: 'var(--text)' }}>{t.roadCol}</strong> — {t.tipRoad}</div>
+          <div><strong style={{ color: 'var(--text)' }}>{t.nextCol}</strong> — {t.tipNext}</div>
           <div><strong style={{ color: 'var(--text)' }}>x</strong> — {t.clinchX}</div>
           <div><strong style={{ color: 'var(--text)' }}>y</strong> — {t.clinchY}</div>
           <div><strong style={{ color: 'var(--text)' }}>z</strong> — {t.clinchZ}</div>
         </div>
       </div>
-
-      {tooltip && (
-        <div
-          style={{
-            position: 'fixed',
-            top: tooltip.y + 15,
-            left: tooltip.x - 90,
-            background: 'var(--tooltip-bg)',
-            border: '1px solid var(--tooltip-border)',
-            borderRadius: 8,
-            padding: '12px 16px',
-            zIndex: 1000,
-            pointerEvents: 'none',
-            boxShadow: '0 4px 12px var(--shadow)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            minWidth: 180,
-          }}
-        >
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', gap: 6 }}>
-            <span style={{ color: tooltip.result === 'W' ? 'var(--link)' : tooltip.result === 'L' ? 'var(--loss)' : 'var(--text-secondary)' }}>
-              {tooltip.result === 'W' ? t.win : tooltip.result === 'L' ? t.loss : t.otLoss}
-            </span>
-            <span>-</span>
-            <span>
-              {new Date((tooltip.game.gameDate || tooltip.game.startTimeUTC) + (tooltip.game.gameDate ? 'T12:00:00Z' : '')).toLocaleDateString(t.locale, { weekday: 'short', month: 'short', day: 'numeric' })}
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src={tooltip.game.awayTeam.logo} alt="" width={40} height={40} style={{ objectFit: 'contain' }} />
-            <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', fontFamily: 'sans-serif' }}>
-              {tooltip.game.awayTeam.score}
-            </span>
-            <div style={{ width: 1, height: 24, backgroundColor: 'var(--border-medium)' }} />
-            <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', fontFamily: 'sans-serif' }}>
-              {tooltip.game.homeTeam.score}
-            </span>
-            <img src={tooltip.game.homeTeam.logo} alt="" width={40} height={40} style={{ objectFit: 'contain' }} />
-          </div>
-        </div>
-      )}
     </div>
   )
 }

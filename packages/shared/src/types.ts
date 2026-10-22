@@ -5,6 +5,14 @@ export interface TeamInfo {
   logo: string;
 }
 
+export interface NextGameInfo {
+  date: string;
+  startTimeUTC?: string;
+  isHome: boolean;
+  opponentAbbrev: string;
+  opponentName: string;
+}
+
 export interface StandingRow {
   team: TeamInfo;
   conference: string;
@@ -26,10 +34,10 @@ export interface StandingRow {
   roadRecord: string;
   last10Record: string;
   wildcardRank: number;
-  nextGame?: string;
   last5: ('W' | 'L' | 'OTL')[];
   last5Games?: any[];
   clinchIndicator?: string;
+  nextGame?: NextGameInfo;
 }
 
 export type GameStatus = 'LIVE' | 'FINAL' | 'FUT';

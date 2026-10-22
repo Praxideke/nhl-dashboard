@@ -55,14 +55,18 @@ function gameSortKey(g: any): string {
   return '';
 }
 
-async function getTeamInfo(season: string, teams: string[], asOfDate: string) {
-  const results = await Promise.allSettled(teams.map((abbrev) => fetchTeamSchedule(abbrev, season)));
+async function getLast5ForTeams(season: string, teams: string[], asOfDate: string) {
+  const results = await Promise.allSettled(
+    teams.map((abbrev) => fetchTeamSchedule(abbrev, season))
+  );
   const last5Map: Record<string, any[]> = {};
+
   for (let i = 0; i < teams.length; i++) {
     const r = results[i];
     if (r.status !== 'fulfilled') continue;
     const raw = r.value;
     if (!raw?.games) continue;
+
     const finished = raw.games
       .filter((g: any) => {
         if (g.gameState !== 'FINAL' && g.gameState !== 'OFF') return false;
@@ -75,6 +79,86 @@ async function getTeamInfo(season: string, teams: string[], asOfDate: string) {
     last5Map[teams[i]] = finished.slice(-5);
   }
   return last5Map;
+}
+
+async function getNextGamesForTeams(asOfDate: string, teams: string[]) {
+  // Запрашиваем 3 раза последовательно (каждый даёт окно ~7 дней):
+  // - schedule/now (текущая неделя)
+  // - schedule/{asOf + 7} (следующая неделя)
+  // - schedule/{asOf + 14} (через 2 недели)
+  const base = new Date(asOfDate + 'T00:00:00Z');
+  const offsets = [7, 14];
+
+  const responses: any[] = [];
+
+  try {
+    const now = await fetchScheduleRaw();
+    responses.push(now);
+  } catch (e) {
+    console.warn('schedule/now failed:', (e as Error).message);
+  }
+
+  for (const offset of offsets) {
+    const d = new Date(base);
+    d.setUTCDate(d.getUTCDate() + offset);
+    const dateStr = d.toISOString().split('T')[0];
+    try {
+      const resp = await fetchScheduleRaw(dateStr);
+      responses.push(resp);
+    } catch (e) {
+      console.warn(`schedule/${dateStr} failed:`, (e as Error).message);
+    }
+  }
+
+  const nextMap: Record<string, any | null> = {};
+  const teamSet = new Set(teams);
+
+  // Собираем все будущие игры, сортируем по дате
+  const candidateGames: any[] = [];
+  for (const resp of responses) {
+    if (!resp?.gameWeek) continue;
+    for (const day of resp.gameWeek) {
+      if (!day.games) continue;
+      for (const g of day.games) {
+        if (g.gameType !== 2 && g.gameType !== 3) continue;
+        if (g.gameState === 'FINAL' || g.gameState === 'OFF') continue;
+        if (!g.homeTeam?.abbrev || !g.awayTeam?.abbrev) continue;
+        const gameDate = g.gameDate || day.date || (g.startTimeUTC ? g.startTimeUTC.slice(0, 10) : '');
+        if (!gameDate) continue;
+        if (gameDate < asOfDate) continue;
+        candidateGames.push({ ...g, _gameDate: gameDate });
+      }
+    }
+  }
+
+  // Дедупликация по id
+  const seen = new Set<number>();
+  const uniqueGames: any[] = [];
+  for (const g of candidateGames) {
+    if (seen.has(g.id)) continue;
+    seen.add(g.id);
+    uniqueGames.push(g);
+  }
+
+  // Сортируем по дате
+  uniqueGames.sort((a, b) => a._gameDate.localeCompare(b._gameDate));
+
+  // Для каждой команды — первая будущая игра
+  for (const g of uniqueGames) {
+    for (const teamAbbrev of [g.homeTeam.abbrev, g.awayTeam.abbrev]) {
+      if (teamSet.has(teamAbbrev) && !nextMap[teamAbbrev]) {
+        nextMap[teamAbbrev] = g;
+      }
+    }
+  }
+
+  for (const team of teams) {
+    if (!(team in nextMap)) nextMap[team] = null;
+  }
+
+  console.log(`[next-games] fetched ${uniqueGames.length} upcoming games, assigned ${Object.values(nextMap).filter(Boolean).length}/${teams.length} teams`);
+
+  return nextMap;
 }
 
 async function getAllScores(centerDate: string) {
@@ -146,10 +230,15 @@ app.get('/api/standings', async (req) => {
       throw lastError ?? new Error(`No standings for ${asOf}`);
     }
     const teams = raw.standings.map((s: any) => s.teamAbbrev.default);
-    const last5Map = await cached(`last5-map:${asOf}:${seasonStr}`, 600_000, () =>
-      getTeamInfo(seasonStr!, teams, asOf!)
+
+    const last5Map = await cached(`last5:${asOf}:${seasonStr}`, 600_000, () =>
+      getLast5ForTeams(seasonStr!, teams, asOf!)
     );
-    return normalizeStandings(raw, last5Map);
+    const nextGamesMap = await cached(`next-games:${asOf}`, 600_000, () =>
+      getNextGamesForTeams(asOf!, teams)
+    );
+
+    return normalizeStandings(raw, last5Map, nextGamesMap);
   });
 });
 
@@ -180,14 +269,12 @@ app.get('/api/scores', async (req) => {
 app.get('/api/playoffs', async (req) => {
   const { season } = req.query as { season?: string };
   const targetSeason = season ?? '20262027';
-  // Плей-офф проходит в год ОКОНЧАНИЯ сезона: '20262027' → '2027'
   const endYearStr = targetSeason.slice(4, 8);
   const yearNum = parseInt(endYearStr, 10);
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
 
-  // Плей-офф начинается примерно в апреле. Если ещё не апрель года окончания — данных нет.
   const playoffsStarted =
     yearNum < currentYear ||
     (yearNum === currentYear && currentMonth >= 4);
@@ -356,10 +443,10 @@ app.get('/api/leaders', async (req) => {
   });
 });
 
-// ── Раздача собранного фронтенда (только для production-режима Electron) ──
 try {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const distPath = process.env.WEB_DIST_PATH
-    || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist');
+    || path.resolve(__dirname, '../../web/dist');
 
   await app.register(fastifyStatic, {
     root: distPath,
@@ -382,5 +469,3 @@ try {
 
 await app.listen({ port: 3001, host: '0.0.0.0' });
 console.log('API is running on http://localhost:3001');
-
-
