@@ -60,10 +60,9 @@ body {
 /* Строки таблицы */
 .standings-row {
   position: relative;
-  z-index: 1;
 }
 .standings-row:hover {
-  z-index: 20;
+  z-index: 100; /* Поднимаем строку выше всех остальных элементов */
   background-color: rgba(40, 50, 70, 0.75) !important;
 }
 
@@ -79,14 +78,14 @@ body {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 100;
+  z-index: 9999; /* Тултип всегда поверх всего */
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
   background: var(--tooltip-bg);
   border: 1px solid var(--tooltip-border);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
   transition: opacity 0.12s ease, visibility 0.12s ease;
 }
 .cell-tooltip:hover > .tooltip-content {
@@ -103,14 +102,14 @@ body {
   position: absolute;
   top: calc(100% + 8px);
   right: -30px;
-  z-index: 100;
+  z-index: 9999;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
   background: var(--tooltip-bg);
   border: 1px solid var(--tooltip-border);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
   transition: opacity 0.12s ease, visibility 0.12s ease;
 }
 .last5-dot:hover > .tooltip-content {

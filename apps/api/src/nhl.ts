@@ -52,6 +52,28 @@ export async function fetchEspnRoster(nhlAbbrev: string) {
   return r.json();
 }
 
+export async function fetchEspnInjuries() {
+  const r = await fetch(`${ESPN_BASE}/injuries`, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+  });
+  if (!r.ok) throw new Error(`ESPN injuries ${r.status}`);
+  return r.json();
+}
+
+export async function fetchEspnNews() {
+  const r = await fetch(`${ESPN_BASE}/news`, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+  });
+  if (!r.ok) throw new Error(`ESPN news ${r.status}`);
+  return r.json();
+}
+
+export async function fetchPlayerSearch(query: string) {
+  const r = await fetch(`https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=10&q=${encodeURIComponent(query)}`);
+  if (!r.ok) throw new Error(`NHL search ${r.status}`);
+  return r.json();
+}
+
 export async function fetchPlayer(playerId: number | string) {
   const r = await fetch(`${BASE}/player/${playerId}/landing`);
   if (!r.ok) throw new Error(`NHL player ${playerId} ${r.status}`);

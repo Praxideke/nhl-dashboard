@@ -8,7 +8,12 @@ import { TeamCard } from './TeamCard'
 import { GameCard } from './GameCard'
 import { LeagueLeaders } from './LeagueLeaders'
 import { PlayerCard } from './PlayerCard'
+import { InjuriesView } from './InjuriesView'
+import { CalendarView } from './CalendarView'
+import { NewsView } from './NewsView'
 import { T, type Lang } from './i18n'
+
+const APP_VERSION = '1.3.6'
 
 const SEASONS = [
   { label: '2026-27', value: '20262027' },
@@ -42,7 +47,7 @@ const SEASON_END_DATES: Record<string, string> = {
 }
 
 const STORAGE_KEY = 'nhl-dashboard-settings'
-type ViewMode = 'standings' | 'playoffs' | 'leaders'
+type ViewMode = 'standings' | 'playoffs' | 'leaders' | 'injuries' | 'calendar' | 'news'
 
 interface Settings {
   lang: Lang
@@ -58,6 +63,9 @@ function loadSettings(): Settings {
       const view: ViewMode =
         parsed.view === 'playoffs' ? 'playoffs'
         : parsed.view === 'leaders' ? 'leaders'
+        : parsed.view === 'injuries' ? 'injuries'
+        : parsed.view === 'calendar' ? 'calendar'
+        : parsed.view === 'news' ? 'news'
         : 'standings'
       return {
         lang: parsed.lang === 'en' ? 'en' : 'ru',
@@ -89,6 +97,7 @@ export default function App() {
   const [games, setGames] = useState<GameRow[]>([])
   const [playoffs, setPlayoffs] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(() => {
     return SEASON_END_DATES[initial.season] ?? null
   })
@@ -98,6 +107,7 @@ export default function App() {
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null)
   const [selectedGameId, setSelectedGameId] = useState<number | null>(null)
   const [selectedLeaderPlayerId, setSelectedLeaderPlayerId] = useState<number | null>(null)
+
   const t = T[lang]
 
   useEffect(() => {
@@ -110,10 +120,13 @@ export default function App() {
     let cancelled = false
     async function load() {
       try {
-        if (view === 'leaders') {
+        if (view === 'leaders' || view === 'injuries' || view === 'calendar' || view === 'news') {
           setError(null)
           return
         }
+        
+        if (!cancelled) setLoading(true)
+        
         const promises: Promise<any>[] = [
           getStandings(selectedDate ?? undefined, selectedSeason),
           getScores(selectedDate ?? undefined)
@@ -131,6 +144,8 @@ export default function App() {
         setError(null)
       } catch (e) {
         if (!cancelled) setError((e as Error).message)
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     }
     load()
@@ -188,18 +203,43 @@ export default function App() {
   const isToday = selectedDate === null || selectedDate === today
   const isTomorrow = selectedDate === tomorrow
 
+  const displayDate = selectedDate 
+    ? new Date(selectedDate + 'T12:00:00Z').toLocaleDateString(t.locale, { day: 'numeric', month: 'long' })
+    : t.todayBtn
+
   return (
     <div style={{
       padding: '10px 16px',
       maxWidth: 1400,
       margin: '0 auto',
       color: 'var(--text)',
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 24, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{t.dashboard}</h1>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button onClick={() => setLang('ru')} style={smallBtnStyle(lang === 'ru')}>RU</button>
-          <button onClick={() => setLang('en')} style={smallBtnStyle(lang === 'en')}>EN</button>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <button onClick={() => setLang('ru')} style={smallBtnStyle(lang === 'ru')}>RU</button>
+            <button onClick={() => setLang('en')} style={smallBtnStyle(lang === 'en')}>EN</button>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ 
+              fontSize: 11, 
+              color: '#fff', 
+              backgroundColor: 'rgba(0,0,0,0.4)', 
+              padding: '2px 8px', 
+              borderRadius: 12,
+              userSelect: 'none', 
+              letterSpacing: '0.5px',
+              border: '1px solid rgba(255,255,255,0.1)'
+            }}>
+              v{APP_VERSION}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -213,92 +253,136 @@ export default function App() {
         <button onClick={() => setView('leaders')} style={viewBtnStyle(view === 'leaders')}>
           {t.leaders}
         </button>
+        <button onClick={() => setView('injuries')} style={viewBtnStyle(view === 'injuries')}>
+          {t.injuries}
+        </button>
+        <button onClick={() => setView('calendar')} style={viewBtnStyle(view === 'calendar')}>
+          {t.calendar}
+        </button>
+        <button onClick={() => setView('news')} style={viewBtnStyle(view === 'news')}>
+          {t.news}
+        </button>
       </div>
 
-      <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <label htmlFor="season-picker" style={{ fontWeight: 600, fontSize: 13 }}>{t.seasonLabel}:</label>
-          <select
-            id="season-picker"
-            value={selectedSeason}
-            onChange={(e) => {
-              const newSeason = e.target.value
-              setSelectedSeason(newSeason)
-              setSelectedDate(SEASON_END_DATES[newSeason] ?? null)
-            }}
-            style={{ padding: '5px 8px', fontSize: 13, borderRadius: 4 }}
-          >
-            {SEASONS.map(s => (
-              <option key={s.value} value={s.value}>{t.seasonWord} {s.label}</option>
-            ))}
-          </select>
-        </div>
-        {view === 'standings' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <label htmlFor="date-picker" style={{ fontWeight: 600, fontSize: 13 }}>{t.dateLabel}:</label>
-            <input
-              id="date-picker"
-              type="date"
-              value={selectedDate ?? today}
-              max={today}
+      {view !== 'injuries' && view !== 'calendar' && view !== 'news' && (
+        <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label htmlFor="season-picker" style={{ fontWeight: 600, fontSize: 13 }}>{t.seasonLabel}:</label>
+            <select
+              id="season-picker"
+              value={selectedSeason}
               onChange={(e) => {
-                const val = e.target.value
-                setSelectedDate(val === today ? null : val)
+                const newSeason = e.target.value
+                setSelectedSeason(newSeason)
+                setSelectedDate(SEASON_END_DATES[newSeason] ?? null)
               }}
               style={{ padding: '5px 8px', fontSize: 13, borderRadius: 4 }}
-            />
-            {isCurrentSeason && (
-              <>
-                <button onClick={() => goToDay(yesterday)} style={dayBtnStyle(isYesterday)}>
-                  {t.yesterdayBtn}
-                </button>
-                <button onClick={() => goToDay(null)} style={dayBtnStyle(isToday)}>
-                  {t.todayBtn}
-                </button>
-                <button onClick={() => goToDay(tomorrow)} style={dayBtnStyle(isTomorrow)}>
-                  {t.tomorrowBtn}
-                </button>
-              </>
-            )}
+            >
+              {SEASONS.map(s => (
+                <option key={s.value} value={s.value}>{t.seasonWord} {s.label}</option>
+              ))}
+            </select>
           </div>
-        )}
-      </div>
+          {view === 'standings' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <label htmlFor="date-picker" style={{ fontWeight: 600, fontSize: 13 }}>{t.dateLabel}:</label>
+              <input
+                id="date-picker"
+                type="date"
+                value={selectedDate ?? today}
+                max={today}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setSelectedDate(val === today ? null : val)
+                }}
+                style={{ padding: '5px 8px', fontSize: 13, borderRadius: 4 }}
+              />
+              {isCurrentSeason && (
+                <>
+                  <button onClick={() => goToDay(yesterday)} style={dayBtnStyle(isYesterday)}>
+                    {t.yesterdayBtn}
+                  </button>
+                  <button onClick={() => goToDay(null)} style={dayBtnStyle(isToday)}>
+                    {t.todayBtn}
+                  </button>
+                  <button onClick={() => goToDay(tomorrow)} style={dayBtnStyle(isTomorrow)}>
+                    {t.tomorrowBtn}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {error && <div style={{ color: 'var(--loss)', marginBottom: 12 }}>Error: {error}</div>}
 
-      {view === 'standings' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+      <div style={{ flex: 1 }}>
+        {view === 'standings' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+            <section style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+              <h2 style={{ marginTop: 0, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>
+                {t.standings} <span style={{ fontSize: 16, fontWeight: 'normal', color: 'var(--text-muted)' }}>— на утро {displayDate}</span>
+              </h2>
+              <StandingsTable 
+                key={`standings-${selectedDate || 'today'}`} 
+                rows={standings} 
+                t={t} 
+                onTeamClick={(abbrev) => setSelectedTeam(abbrev)} 
+              />
+            </section>
+            <section style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+              <h2 style={{ marginTop: 0, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{t.scores}</h2>
+              <ScoresFeed
+                key={`scores-${selectedDate || 'today'}`}
+                games={games}
+                centerDate={selectedDate ?? today}
+                t={t}
+                onGameClick={(id) => setSelectedGameId(id)}
+              />
+            </section>
+          </div>
+        )}
+
+        {view === 'playoffs' && (
           <section>
-            <h2 style={{ marginTop: 0, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{t.standings}</h2>
-            <StandingsTable rows={standings} t={t} onTeamClick={(abbrev) => setSelectedTeam(abbrev)} />
+            <PlayoffBracket data={playoffs} t={t} />
           </section>
+        )}
+
+        {view === 'leaders' && (
           <section>
-            <h2 style={{ marginTop: 0, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{t.scores}</h2>
-            <ScoresFeed
-              games={games}
-              centerDate={selectedDate ?? today}
+            <LeagueLeaders
+              season={selectedSeason}
               t={t}
-              onGameClick={(id) => setSelectedGameId(id)}
+              onPlayerClick={(id) => setSelectedLeaderPlayerId(id)}
             />
           </section>
-        </div>
-      )}
+        )}
 
-      {view === 'playoffs' && (
-        <section>
-          <PlayoffBracket data={playoffs} t={t} />
-        </section>
-      )}
+        {view === 'injuries' && (
+          <section>
+            <h2 style={{ marginTop: 0, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{t.injuries}</h2>
+            <InjuriesView t={t} lang={lang} onPlayerClick={(id) => setSelectedLeaderPlayerId(Number(id))} />
+          </section>
+        )}
 
-      {view === 'leaders' && (
-        <section>
-          <LeagueLeaders
-            season={selectedSeason}
-            t={t}
-            onPlayerClick={(id) => setSelectedLeaderPlayerId(id)}
-          />
-        </section>
-      )}
+        {view === 'calendar' && (
+          <section>
+            <CalendarView 
+              t={t} 
+              onGameClick={(id) => setSelectedGameId(id)} 
+            />
+          </section>
+        )}
+
+        {view === 'news' && (
+          <section>
+            <h2 style={{ marginTop: 0, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{t.news}</h2>
+            <NewsView t={t} lang={lang} />
+          </section>
+        )}
+      </div>
 
       {selectedTeam && (
         <TeamCard

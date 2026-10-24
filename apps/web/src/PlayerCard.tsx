@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Translation } from './i18n'
 import { getPlayer } from './api'
+import { PlayerComparison } from './PlayerComparison' // <-- ИМПОРТ
 
 interface Props {
   playerId: number | string
@@ -193,6 +194,7 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showComparison, setShowComparison] = useState(false) // <-- СТЕЙТ ДЛЯ СРАВНЕНИЯ
 
   useEffect(() => {
     let cancelled = false
@@ -221,10 +223,10 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
   }, [])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && !showComparison) onClose() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+  }, [onClose, showComparison])
 
   const pos = data?.position
   const isG = isGoalie(pos)
@@ -369,6 +371,23 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
                     </div>
                   )}
                 </div>
+                {/* КНОПКА СРАВНЕНИЯ */}
+                <button
+                  onClick={() => setShowComparison(true)}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: 'var(--accent)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: 14,
+                    alignSelf: 'flex-start'
+                  }}
+                >
+                  {t.compare}
+                </button>
               </div>
 
               {/* Био-метаданные */}
@@ -455,6 +474,15 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
           )}
         </div>
       </div>
+
+      {/* РЕНДЕР СРАВНЕНИЯ */}
+      {showComparison && (
+        <PlayerComparison
+          player1Data={data}
+          t={t}
+          onClose={() => setShowComparison(false)}
+        />
+      )}
     </>
   )
 }

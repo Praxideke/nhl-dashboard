@@ -86,18 +86,22 @@ function teamLogoUrl(abbrev: string): string {
 }
 
 function PlayerHeadshot({
-  playerId, teamAbbrev, name, season, size = 64,
+  playerId, teamAbbrev, name, season, size = 64, isHero = false,
 }: {
   playerId?: number | string
   teamAbbrev?: any
   name?: string
   season: number | string
   size?: number
+  isHero?: boolean
 }) {
   const [imgError, setImgError] = useState(false)
   const abbrev = abbrevOf(teamAbbrev)
   const headshotUrl = playerId && abbrev ? buildHeadshotUrl(playerId, abbrev, season) : null
   const showPhoto = headshotUrl && !imgError
+
+  const borderStyle = isHero ? '3px solid #FFD700' : '2px solid var(--accent)'
+  const shadowStyle = isHero ? '0 0 15px rgba(255, 215, 0, 0.6)' : 'none'
 
   if (showPhoto) {
     return (
@@ -108,7 +112,8 @@ function PlayerHeadshot({
         height={size}
         style={{
           objectFit: 'cover', borderRadius: '50%',
-          backgroundColor: 'var(--card-bg-alt)', border: '2px solid var(--accent)', flexShrink: 0,
+          backgroundColor: 'var(--card-bg-alt)', border: borderStyle, flexShrink: 0,
+          boxShadow: shadowStyle,
         }}
         onError={() => setImgError(true)}
       />
@@ -120,7 +125,8 @@ function PlayerHeadshot({
       backgroundColor: 'var(--accent)', color: 'var(--accent-text)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: Math.round(size * 0.35), fontWeight: 'bold',
-      border: '2px solid var(--accent)', flexShrink: 0,
+      border: borderStyle, flexShrink: 0,
+      boxShadow: shadowStyle,
     }}>
       {initials(name)}
     </div>
@@ -212,7 +218,6 @@ export function GameCard({ gameId, t, onClose }: Props) {
     return () => { cancelled = true }
   }, [gameId])
 
-  // Жесткая блокировка прокрутки body и html
   useEffect(() => {
     const prevBody = document.body.style.overflow
     const prevHtml = document.documentElement.style.overflow
@@ -232,22 +237,20 @@ export function GameCard({ gameId, t, onClose }: Props) {
 
   const away: TeamSide = {
     abbrev: abbrevOf(data?.awayTeam?.abbrev),
-    // Склеиваем город и прозвище (например, Philadelphia + Flyers)
     name: data?.awayTeam?.placeName?.default && data?.awayTeam?.commonName?.default
       ? `${data.awayTeam.placeName.default} ${data.awayTeam.commonName.default}`
       : (data?.awayTeam?.commonName?.default ?? data?.awayTeam?.name?.default),
-    logo: data?.awayTeam?.logo,
+    logo: teamLogoUrl(abbrevOf(data?.awayTeam?.abbrev)), // <-- ИСПОЛЬЗУЕМ НАШУ ФУНКЦИЮ ДЛЯ _DARK ЛОГОТИПА
     score: data?.awayTeam?.score,
     sog: data?.awayTeam?.sog,
     record: data?.awayTeam?.record,
   }
   const home: TeamSide = {
     abbrev: abbrevOf(data?.homeTeam?.abbrev),
-    // Склеиваем город и прозвище (например, Buffalo + Sabres)
     name: data?.homeTeam?.placeName?.default && data?.homeTeam?.commonName?.default
       ? `${data.homeTeam.placeName.default} ${data.homeTeam.commonName.default}`
       : (data?.homeTeam?.commonName?.default ?? data?.homeTeam?.name?.default),
-    logo: data?.homeTeam?.logo,
+    logo: teamLogoUrl(abbrevOf(data?.homeTeam?.abbrev)), // <-- ИСПОЛЬЗУЕМ НАШУ ФУНКЦИЮ ДЛЯ _DARK ЛОГОТИПА
     score: data?.homeTeam?.score,
     sog: data?.homeTeam?.sog,
     record: data?.homeTeam?.record,
@@ -262,6 +265,14 @@ export function GameCard({ gameId, t, onClose }: Props) {
   const venue = data?.venue?.default
   const attendance = data?.attendance
   const season = data?.season ?? '20262027'
+
+  const playerGoalCounts: Record<string, number> = {}
+  goalsByPeriod.forEach((p: any) => {
+    p.goals?.forEach((g: any) => {
+      const pid = g.playerId ?? g.scorer?.playerId
+      if (pid) playerGoalCounts[pid] = (playerGoalCounts[pid] || 0) + 1
+    })
+  })
 
   const regularPeriods = goalsByPeriod.filter((p: any) => {
     const num = p.periodDescriptor?.number
@@ -290,61 +301,99 @@ export function GameCard({ gameId, t, onClose }: Props) {
     const playerName = g.name?.default ?? g.firstName?.default
     const playerId = g.playerId ?? g.scorer?.playerId
 
+    const goalCount = playerId ? (playerGoalCounts[playerId] || 0) : 0
+    const isHero = goalCount >= 3
+
     return (
       <div key={gi} style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 0', fontSize: 14,
+        display: 'flex',
+        alignItems: 'center',
+        padding: '10px 0',
+        fontSize: 14,
         borderBottom: gi < total - 1 ? '1px solid var(--border-light)' : 'none',
         color: 'var(--text)',
+        width: '100%',
       }}>
-        <div
-          onClick={() => playerId && setSelectedPlayerId(playerId)}
-          style={{ cursor: playerId ? 'pointer' : 'default', flexShrink: 0 }}
-        >
-          <PlayerHeadshot playerId={playerId} teamAbbrev={teamAbbrevStr} name={playerName} season={season} size={64} />
-        </div>
-        <div style={{ flexShrink: 0, maxWidth: 140, minWidth: 0 }}>
+
+        {/* Левая колонка (фиксированная ширина 250px, текст больше никогда не обрежется) */}
+        <div style={{ width: 250, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, paddingRight: 10, zIndex: 1 }}>
           <div
             onClick={() => playerId && setSelectedPlayerId(playerId)}
-            style={{
-              fontSize: 15, fontWeight: 700, color: 'var(--text)',
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              lineHeight: 1.25, cursor: playerId ? 'pointer' : 'default',
-            }}
-            onMouseEnter={(e) => { if (playerId) e.currentTarget.style.color = 'var(--accent)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text)' }}
+            style={{ cursor: playerId ? 'pointer' : 'default', flexShrink: 0 }}
           >
-            {playerName}
+            <PlayerHeadshot 
+              playerId={playerId} 
+              teamAbbrev={teamAbbrevStr} 
+              name={playerName} 
+              season={season} 
+              size={64} 
+              isHero={isHero}
+            />
           </div>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: 12, color: 'var(--text-muted)', marginTop: 3,
-            whiteSpace: 'nowrap',
-          }}>
-            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtTime(g.timeInPeriod)}</span>
-            <span>·</span>
-            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{teamAbbrevStr}</span>
-            {g.strength && (
-              <>
-                <span>·</span>
-                <StrengthBadge code={g.strength} t={t} />
-              </>
-            )}
+          
+          <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <div
+              onClick={() => playerId && setSelectedPlayerId(playerId)}
+              style={{
+                fontSize: 15, fontWeight: 700, color: isHero ? '#FFD700' : 'var(--text)',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                lineHeight: 1.25, cursor: playerId ? 'pointer' : 'default',
+              }}
+              onMouseEnter={(e) => { if (playerId) e.currentTarget.style.color = 'var(--accent)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = isHero ? '#FFD700' : 'var(--text)' }}
+            >
+              {playerName}
+              {isHero && (
+                <span style={{ marginLeft: 6, fontSize: 12, color: '#FFD700' }}>
+                  ⭐ {goalCount}
+                </span>
+              )}
+            </div>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              fontSize: 12, color: 'var(--text-muted)', marginTop: 3,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+            }}>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtTime(g.timeInPeriod)}</span>
+              <span>·</span>
+              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{teamAbbrevStr}</span>
+              {g.strength && (
+                <>
+                  <span>·</span>
+                  <StrengthBadge code={g.strength} t={t} />
+                </>
+              )}
+            </div>
           </div>
         </div>
-        <div style={{ flex: 1, minWidth: 8 }} />
-        {teamAbbrevStr && (
-          <img
-            src={teamLogoUrl(teamAbbrevStr)}
-            alt=""
-            title={teamAbbrevStr}
-            style={{ width: 80, height: 80, objectFit: 'contain', opacity: 0.15, flexShrink: 0, filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.25))' }}
-          />
-        )}
-        <div style={{ flex: 1, minWidth: 8 }} />
-        <span style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--accent)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, minWidth: 48, textAlign: 'right' }}>
-          {g.awayScore}–{g.homeScore}
-        </span>
+
+        {/* Центральная колонка (растягивается на всё оставшееся место, центрирует логотип со сдвигом влево) */}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 0, minWidth: 0 }}>
+          {teamAbbrevStr && (
+            <img
+              src={teamLogoUrl(teamAbbrevStr)}
+              alt=""
+              title={teamAbbrevStr}
+              style={{
+                width: 80, 
+                height: 80, 
+                objectFit: 'contain', 
+                opacity: 0.15,
+                filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.25))',
+                pointerEvents: 'none',
+                transform: 'translateX(-30px)'
+              }}
+            />
+          )}
+        </div>
+
+        {/* Правая колонка (фиксированная ширина 60px, счет прижат вправо) */}
+        <div style={{ width: 60, flexShrink: 0, display: 'flex', justifyContent: 'flex-end', zIndex: 1 }}>
+          <span style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
+            {g.awayScore}–{g.homeScore}
+          </span>
+        </div>
+
       </div>
     )
   }
@@ -439,19 +488,18 @@ export function GameCard({ gameId, t, onClose }: Props) {
                   {statusText(data, t)}
                 </span>
               </div>
-              
+
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24,
                 padding: '12px 16px', marginBottom: 12,
                 backgroundColor: 'rgba(15, 20, 30, 0.45)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10,
               }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
-                  {/* Увеличенный логотип с 64 до 100 */}
                   <img src={away.logo} alt="" width={100} height={100} style={{ objectFit: 'contain' }} />
                   <div style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--text)', textAlign: 'center', lineHeight: 1.2 }}>{away.name}</div>
                   {away.record && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{away.record}</div>}
                 </div>
-                
+
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 12px', minWidth: 150 }}>
                   <div style={{ fontSize: 48, fontWeight: 'bold', color: 'var(--accent)', letterSpacing: '1px', lineHeight: 1 }}>
                     {started ? `${away.score ?? 0} – ${home.score ?? 0}` : '— : —'}
@@ -464,7 +512,6 @@ export function GameCard({ gameId, t, onClose }: Props) {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
-                  {/* Увеличенный логотип с 64 до 100 */}
                   <img src={home.logo} alt="" width={100} height={100} style={{ objectFit: 'contain' }} />
                   <div style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--text)', textAlign: 'center', lineHeight: 1.2 }}>{home.name}</div>
                   {home.record && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{home.record}</div>}
@@ -520,7 +567,7 @@ export function GameCard({ gameId, t, onClose }: Props) {
                   {extraPeriods.length > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
                       {extraPeriods.map((p: any) => (
-                        <div key={`${p.periodDescriptor?.periodType ?? 'X'}`} style={{ flex: '0 1 420px', minWidth: 0 }}>
+                        <div key={`${p.periodDescriptor?.periodType ?? 'X'}`} style={{ flex: '0 1 600px', minWidth: 0 }}>
                           {renderPeriodCard(p, 'extra')}
                         </div>
                       ))}

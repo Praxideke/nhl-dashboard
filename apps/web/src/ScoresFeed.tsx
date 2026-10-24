@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import type { GameRow } from '@nhl/shared'
 import type { Translation } from './i18n'
 
@@ -16,6 +16,17 @@ function getLocalDate(input: string | Date): string {
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+// ФУНКЦИЯ ДЛЯ ПРАВИЛЬНОГО (СВЕТЛОГО) ЛОГОТИПА
+function teamLogoUrl(logo?: string, abbrev?: string): string {
+  if (logo) {
+    return logo.replace('_light', '_dark')
+  }
+  if (abbrev) {
+    return `https://assets.nhle.com/logos/nhl/svg/${abbrev}_dark.svg`
+  }
+  return ''
 }
 
 function useGroupedGames(games: GameRow[], centerDate: string) {
@@ -56,12 +67,14 @@ function formatDate(dateStr: string, locale: string = 'ru-RU') {
 }
 
 function MatchRow({
-  game, forceFuture, t, onClick,
+  game, forceFuture, t, onClick, prediction, onPredict,
 }: {
   game: GameRow
   forceFuture?: boolean
   t: Translation
   onClick?: () => void
+  prediction?: 'HOME' | 'AWAY'
+  onPredict?: (choice: 'HOME' | 'AWAY') => void
 }) {
   const isFut = game.status === 'FUT'
   const isFinal = game.status === 'FINAL'
@@ -77,6 +90,10 @@ function MatchRow({
     : isLive
       ? game.period
       : ''
+
+  const isCorrect = isFinal && prediction && (
+    (prediction === 'HOME' && homeWon) || (prediction === 'AWAY' && awayWon)
+  )
 
   return (
     <div
@@ -116,34 +133,89 @@ function MatchRow({
             {t.awayLabel}
           </span>
         </div>
-        <img src={game.awayTeam.logo} alt="" width={56} height={56} style={{ objectFit: 'contain', flexShrink: 0 }} />
+        <img 
+          src={teamLogoUrl(game.awayTeam.logo, game.awayTeam.abbrev)} 
+          alt="" 
+          width={56} 
+          height={56} 
+          style={{ 
+            objectFit: 'contain', 
+            flexShrink: 0,
+            filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.3)) drop-shadow(0 1px 2px rgba(0,0,0,0.5))' 
+          }} 
+        />
       </div>
 
-      {/* Счёт / время */}
-      <div style={{
-        width: 90,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        flexShrink: 0,
-        backgroundColor: 'var(--score-bg)',
-        borderRadius: 6,
-        padding: '6px 8px',
-        margin: '0 8px',
-      }}>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2, textTransform: 'uppercase', minHeight: 12 }}>
-          {!showTime ? periodLabel : ''}
+      {/* Счёт / время + прогнозы */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 110, flexShrink: 0, margin: '0 4px' }}>
+        <div style={{
+          width: 90,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          backgroundColor: 'var(--score-bg)',
+          borderRadius: 6,
+          padding: '6px 8px',
+        }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2, textTransform: 'uppercase', minHeight: 12 }}>
+            {!showTime ? periodLabel : ''}
+          </div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: showTime ? 'var(--text-secondary)' : 'var(--score-text)' }}>
+            {showTime
+              ? formatTime(game.startTimeUTC, t.locale)
+              : `${game.awayTeam.score ?? 0} - ${game.homeTeam.score ?? 0}`}
+          </div>
         </div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: showTime ? 'var(--text-secondary)' : 'var(--score-text)' }}>
-          {showTime
-            ? formatTime(game.startTimeUTC, t.locale)
-            : `${game.awayTeam.score ?? 0} - ${game.homeTeam.score ?? 0}`}
-        </div>
+
+        {/* Кнопки прогнозов (показываем только для будущих матчей) */}
+        {showTime && onPredict && (
+          <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onPredict('AWAY') }}
+              style={{
+                padding: '2px 8px', fontSize: 10, borderRadius: 4, border: '1px solid var(--border)',
+                backgroundColor: prediction === 'AWAY' ? 'var(--accent)' : 'transparent',
+                color: prediction === 'AWAY' ? '#fff' : 'var(--text-muted)',
+                cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
+              }}
+            >
+              {t.predictAway}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onPredict('HOME') }}
+              style={{
+                padding: '2px 8px', fontSize: 10, borderRadius: 4, border: '1px solid var(--border)',
+                backgroundColor: prediction === 'HOME' ? 'var(--accent)' : 'transparent',
+                color: prediction === 'HOME' ? '#fff' : 'var(--text-muted)',
+                cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
+              }}
+            >
+              {t.predictHome}
+            </button>
+          </div>
+        )}
+
+        {/* Результат прогноза (для завершенных матчей) */}
+        {!showTime && prediction && (
+          <div style={{ fontSize: 11, marginTop: 6, fontWeight: 'bold', color: isCorrect ? 'var(--win)' : 'var(--loss)' }}>
+            {isCorrect ? '✅ ' + t.predictionCorrect : '❌ ' + t.predictionWrong}
+          </div>
+        )}
       </div>
 
       {/* Хозяева */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 10, minWidth: 0 }}>
-        <img src={game.homeTeam.logo} alt="" width={56} height={56} style={{ objectFit: 'contain', flexShrink: 0 }} />
+        <img 
+          src={teamLogoUrl(game.homeTeam.logo, game.homeTeam.abbrev)} 
+          alt="" 
+          width={56} 
+          height={56} 
+          style={{ 
+            objectFit: 'contain', 
+            flexShrink: 0,
+            filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.3)) drop-shadow(0 1px 2px rgba(0,0,0,0.5))' 
+          }} 
+        />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
           <span style={{
             fontWeight: homeWon ? 'bold' : 'normal',
@@ -173,13 +245,15 @@ function MatchRow({
 }
 
 function Section({
-  title, data, forceFuture, t, onGameClick,
+  title, data, forceFuture, t, onGameClick, predictions, onPredict,
 }: {
   title: string
   data: { date: string; games: GameRow[] }[]
   forceFuture?: boolean
   t: Translation
   onGameClick?: (gameId: number) => void
+  predictions: Record<number, 'HOME' | 'AWAY'>
+  onPredict: (gameId: number, choice: 'HOME' | 'AWAY') => void
 }) {
   if (data.length === 0) return null
   return (
@@ -221,6 +295,8 @@ function Section({
                 forceFuture={forceFuture}
                 t={t}
                 onClick={onGameClick ? () => onGameClick(g.id) : undefined}
+                prediction={predictions[g.id]}
+                onPredict={(choice) => onPredict(g.id, choice)}
               />
             ))}
           </div>
@@ -230,12 +306,87 @@ function Section({
   )
 }
 
+const PREDICTIONS_STORAGE_KEY = 'nhl-predictions'
+
 export function ScoresFeed({ games, centerDate, t, onGameClick }: Props) {
   const { todayList, future } = useGroupedGames(games, centerDate)
+
+  const [predictions, setPredictions] = useState<Record<number, 'HOME' | 'AWAY'>>(() => {
+    try {
+      const saved = localStorage.getItem(PREDICTIONS_STORAGE_KEY)
+      return saved ? JSON.parse(saved) : {}
+    } catch (e) {
+      return {}
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PREDICTIONS_STORAGE_KEY, JSON.stringify(predictions))
+    } catch (e) {}
+  }, [predictions])
+
+  const handlePredict = (gameId: number, choice: 'HOME' | 'AWAY') => {
+    setPredictions(prev => ({
+      ...prev,
+      [gameId]: choice
+    }))
+  }
+
+  let correct = 0
+  let totalPredictedFinished = 0
+  for (const g of games) {
+    if (g.status === 'FINAL') {
+      const pred = predictions[g.id]
+      if (pred) {
+        totalPredictedFinished++
+        const homeWon = (g.homeTeam.score ?? 0) > (g.awayTeam.score ?? 0)
+        const awayWon = (g.awayTeam.score ?? 0) > (g.homeTeam.score ?? 0)
+        if ((pred === 'HOME' && homeWon) || (pred === 'AWAY' && awayWon)) {
+          correct++
+        }
+      }
+    }
+  }
+
   return (
     <div>
-      <Section title={t.todayMatches} data={todayList} t={t} onGameClick={onGameClick} />
-      <Section title={t.fixtures} data={future} forceFuture={true} t={t} onGameClick={onGameClick} />
+      {totalPredictedFinished > 0 && (
+        <div style={{
+          marginBottom: 16,
+          padding: '10px 16px',
+          backgroundColor: 'rgba(255,255,255,0.05)',
+          border: '1px solid var(--border-light)',
+          borderRadius: 6,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: 13
+        }}>
+          <span style={{ fontWeight: 'bold', color: 'var(--text)' }}>{t.predictionsLabel}</span>
+          <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>
+            {t.predictionsStats.replace('{correct}', String(correct)).replace('{total}', String(totalPredictedFinished))}
+          </span>
+        </div>
+      )}
+
+      <Section 
+        title={t.todayMatches} 
+        data={todayList} 
+        t={t} 
+        onGameClick={onGameClick} 
+        predictions={predictions}
+        onPredict={handlePredict}
+      />
+      <Section 
+        title={t.fixtures} 
+        data={future} 
+        forceFuture={true} 
+        t={t} 
+        onGameClick={onGameClick} 
+        predictions={predictions}
+        onPredict={handlePredict}
+      />
     </div>
   )
 }
