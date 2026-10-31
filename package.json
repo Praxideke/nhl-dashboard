@@ -21,8 +21,9 @@
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2"
   },
-  "version": "1.3.6",
+  "version": "1.4.0",
   "description": "NHL Statistics Dashboard",
   "author": "NHL Dashboard",
   "main": "electron/main.cjs"
 }
+

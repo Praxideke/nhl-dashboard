@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Translation } from './i18n'
 import { getPlayer } from './api'
-import { PlayerComparison } from './PlayerComparison' // <-- ИМПОРТ
+import { PlayerComparison } from './PlayerComparison'
 
 interface Props {
   playerId: number | string
@@ -37,7 +37,7 @@ function isGoalie(position?: string): boolean {
 
 function extractStats(sub: any, position?: string): StatLine | null {
   if (!sub) return null
-  const base: StatLine = { gp: sub.gamesPlayed ?? 0 }
+  const base: StatLine = { gp: sub.gamesPlayed ?? sub.gp ?? 0 }
   if (isGoalie(position)) {
     return {
       ...base,
@@ -194,7 +194,7 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showComparison, setShowComparison] = useState(false) // <-- СТЕЙТ ДЛЯ СРАВНЕНИЯ
+  const [showComparison, setShowComparison] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -241,12 +241,17 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
   const weightKg = data?.weightInKilograms ?? (data?.weightInPounds ? Math.round(data.weightInPounds * 0.4536) : undefined)
   const age = calcAge(data?.birthDate)
   const birthDate = data?.birthDate
-  const birthCity = data?.birthCity?.default
-  const birthCountry = data?.birthCountry
+  
+  // Безопасное извлечение города и страны
+  const birthCityRaw = data?.birthCity
+  const birthCity = typeof birthCityRaw === 'string' ? birthCityRaw : birthCityRaw?.default
+
+  const birthCountryRaw = data?.birthCountry
+  const birthCountry = typeof birthCountryRaw === 'string' ? birthCountryRaw : birthCountryRaw?.name || birthCountryRaw?.default
 
   const draft = data?.draftDetails
   const draftText = draft
-    ? `${draft.year}, ${draft.teamAbbrev}, R${draft.round} #${draft.overallPick}`
+    ? `${draft.year}, ${draft.teamAbbrev || draft.teamName}, R${draft.round} #${draft.overallPick}`
     : t.undrafted
 
   const metaLabelStyle: React.CSSProperties = {
@@ -371,7 +376,6 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
                     </div>
                   )}
                 </div>
-                {/* КНОПКА СРАВНЕНИЯ */}
                 <button
                   onClick={() => setShowComparison(true)}
                   style={{
@@ -475,7 +479,6 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
         </div>
       </div>
 
-      {/* РЕНДЕР СРАВНЕНИЯ */}
       {showComparison && (
         <PlayerComparison
           player1Data={data}

@@ -13,7 +13,7 @@ import { CalendarView } from './CalendarView'
 import { NewsView } from './NewsView'
 import { T, type Lang } from './i18n'
 
-const APP_VERSION = '1.3.6'
+const APP_VERSION = '1.4.0'
 
 const SEASONS = [
   { label: '2026-27', value: '20262027' },
@@ -69,12 +69,12 @@ function loadSettings(): Settings {
         : 'standings'
       return {
         lang: parsed.lang === 'en' ? 'en' : 'ru',
-        season: typeof parsed.season === 'string' ? parsed.season : '20262027',
+        season: typeof parsed.season === 'string' ? parsed.season : '20232024',
         view,
       }
     }
   } catch (e) {}
-  return { lang: 'ru', season: '20262027', view: 'standings' }
+  return { lang: 'ru', season: '20232024', view: 'standings' }
 }
 
 function getDateOffset(days: number): string {
@@ -105,7 +105,7 @@ export default function App() {
   const [lang, setLang] = useState<Lang>(initial.lang)
   const [view, setView] = useState<ViewMode>(initial.view)
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null)
-  const [selectedGameId, setSelectedGameId] = useState<number | null>(null)
+  const [selectedGameId, setSelectedGameId] = useState<number | string | null>(null)
   const [selectedLeaderPlayerId, setSelectedLeaderPlayerId] = useState<number | null>(null)
 
   const t = T[lang]
@@ -210,7 +210,7 @@ export default function App() {
   return (
     <div style={{
       padding: '10px 16px',
-      maxWidth: 1400,
+      maxWidth: 1600,
       margin: '0 auto',
       color: 'var(--text)',
       minHeight: '100vh',
@@ -220,6 +220,7 @@ export default function App() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 24, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{t.dashboard}</h1>
         
+        {/* Панель управления: кнопки сверху, версия снизу */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <button onClick={() => setLang('ru')} style={smallBtnStyle(lang === 'ru')}>RU</button>
@@ -319,7 +320,7 @@ export default function App() {
 
       <div style={{ flex: 1 }}>
         {view === 'standings' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 20 }}>
             <section style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
               <h2 style={{ marginTop: 0, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>
                 {t.standings} <span style={{ fontSize: 16, fontWeight: 'normal', color: 'var(--text-muted)' }}>— на утро {displayDate}</span>

@@ -11,22 +11,22 @@ const DIVISIONS = {
 } as const
 
 const COL_WIDTHS_PCT = [
-  '4%',   // Pos
-  '30%',  // Team
-  '3%',   // GP
-  '3%',   // W
-  '3%',   // L
-  '3%',   // OTL
+  '3.5%', // Pos
+  '25%',  // Team
+  '3.5%', // GP
+  '3.5%', // W
+  '3.5%', // L
+  '3.5%', // OTL
   '5%',   // PTS
   '3.5%', // RW
   '3.5%', // GF
   '3.5%', // GA
-  '3.5%', // DIFF
-  '6%',   // Home
-  '6%',   // Road
-  '9%',   // Last 5
-  '6%',   // Streak
-  '8%',   // Next
+  '4%',   // DIFF
+  '7%',   // Home
+  '7%',   // Road
+  '9.5%', // Last 5
+  '8%',   // Streak
+  '6.5%', // Next
 ]
 
 interface Props {
@@ -134,8 +134,8 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
   }, [rows, mode, t])
 
   const thStyle: React.CSSProperties = {
-    padding: '10px 4px',
-    fontSize: 12,
+    padding: '10px 2px',
+    fontSize: 11,
     fontWeight: 'bold',
     textTransform: 'uppercase',
     color: 'var(--header-text)',
@@ -195,16 +195,17 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                 <table style={{
                   width: '100%',
                   borderCollapse: 'collapse',
-                  fontSize: 15,
+                  fontSize: 14,
                   tableLayout: 'fixed',
-                  /* overflow: 'hidden',  -- УБРАНО, чтобы тултипы не обрезались */
+                  borderRadius: 8,
+                  // Убрали overflow: hidden, чтобы тултипы не обрезались
                 }}>
                   <colgroup>
                     {COL_WIDTHS_PCT.map((w, i) => <col key={i} style={{ width: w }} />)}
                   </colgroup>
                   <thead>
                     <tr>
-                      <th style={{ ...thStyle, borderTopLeftRadius: 8 }} title={t.tipPos}>{t.pos}</th>
+                      <th style={{...thStyle, borderTopLeftRadius: 8}} title={t.tipPos}>{t.pos}</th>
                       <th style={thLeftStyle} title={t.tipTeam}>{t.teamCol}</th>
                       <th style={thStyle} title={t.tipGP}>{t.gp}</th>
                       <th style={thStyle} title={t.tipW}>{t.wCol}</th>
@@ -219,7 +220,7 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                       <th style={thStyle} title={t.tipRoad}>{t.roadCol}</th>
                       <th style={thStyle} title={t.tipLast5}>{t.last5Col}</th>
                       <th style={thStyle} title={t.tipStreak}>{t.streakCol}</th>
-                      <th style={{ ...thStyle, borderTopRightRadius: 8 }} title={t.tipNext}>{t.nextCol}</th>
+                      <th style={{...thStyle, borderTopRightRadius: 8}} title={t.tipNext}>{t.nextCol}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -246,6 +247,15 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                           key={r.team.abbrev}
                           className="standings-row"
                           onClick={() => onTeamClick?.(r.team.abbrev)}
+                          // Точечное исправление: поднимаем строку над соседними
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.position = 'relative';
+                            e.currentTarget.style.zIndex = '50';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.position = '';
+                            e.currentTarget.style.zIndex = '';
+                          }}
                           style={{
                             backgroundColor: baseBg,
                             cursor: onTeamClick ? 'pointer' : 'default',
@@ -264,7 +274,7 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                           </td>
 
                           <td style={{ padding: '0 6px', overflow: 'hidden' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                               {r.clinchIndicator && (
                                 <span
                                   title={
@@ -289,8 +299,8 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                               <img
                                 src={teamLogoUrl(r.team.logo, r.team.abbrev)}
                                 alt=""
-                                width={56}
-                                height={56}
+                                width={48}
+                                height={48}
                                 style={{
                                   objectFit: 'contain',
                                   flexShrink: 0,
@@ -336,11 +346,11 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                             {r.goalDiff > 0 ? `+${r.goalDiff}` : r.goalDiff}
                           </td>
 
-                          <td style={{ padding: '0 2px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap' }}>{r.homeRecord}</td>
-                          <td style={{ padding: '0 2px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap' }}>{r.roadRecord}</td>
+                          <td style={{ padding: '0 2px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap', fontSize: 13 }}>{r.homeRecord}</td>
+                          <td style={{ padding: '0 8px 0 2px', textAlign: 'center', color: 'var(--text)', whiteSpace: 'nowrap', fontSize: 13 }}>{r.roadRecord}</td>
 
-                          <td style={{ padding: '0 2px' }}>
-                            <div style={{ display: 'flex', gap: 5, justifyContent: 'center' }}>
+                          <td style={{ padding: '0 4px' }}>
+                            <div style={{ display: 'flex', gap: 7, justifyContent: 'center' }}>
                               {(r.last5 || []).map((res, j) => {
                                 let bgDot = 'transparent'
                                 let border: string = '2px solid #d0021b'
@@ -354,9 +364,10 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                                     key={j}
                                     className="last5-dot"
                                     style={{
-                                      width: 10, height: 10, borderRadius: '50%',
+                                      width: 11, height: 11, borderRadius: '50%',
                                       backgroundColor: bgDot, border,
                                       flexShrink: 0,
+                                      position: 'relative', // Для позиционирования тултипа
                                     }}
                                     onClick={(e) => e.stopPropagation()}
                                   >
@@ -375,9 +386,11 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                                         <div
                                           className="tooltip-content"
                                           style={{
+                                            // ВОЗВРАЩАЕМ КАК БЫЛО, только добавляем z-index
                                             padding: '14px 20px',
                                             minWidth: 230,
                                             textAlign: 'center',
+                                            zIndex: 9999,
                                           }}
                                         >
                                           <div style={{
@@ -430,7 +443,7 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                             </div>
                           </td>
 
-                          <td style={{ padding: '0 2px', textAlign: 'center', color: streakColor, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          <td style={{ padding: '0 6px 0 2px', textAlign: 'center', color: streakColor, fontWeight: 600, whiteSpace: 'nowrap', fontSize: 13 }}>
                             {r.streak}
                           </td>
 
@@ -438,14 +451,14 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                             <div
                               className="cell-tooltip"
                               onClick={(e) => e.stopPropagation()}
-                              style={{ display: 'flex', justifyContent: 'center' }}
+                              style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}
                             >
                               {r.nextGame ? (
                                 <img
                                   src={`https://assets.nhle.com/logos/nhl/svg/${r.nextGame.opponentAbbrev}_dark.svg`}
                                   alt={r.nextGame.opponentAbbrev}
-                                  width={56}
-                                  height={56}
+                                  width={48}
+                                  height={48}
                                   style={{
                                     objectFit: 'contain',
                                     opacity: 0.95,
@@ -480,9 +493,11 @@ export function StandingsTable({ rows, t, onTeamClick }: Props) {
                                   <div
                                     className="tooltip-content"
                                     style={{
+                                      // ВОЗВРАЩАЕМ КАК БЫЛО, только добавляем z-index
                                       padding: '14px 20px',
                                       minWidth: 220,
                                       textAlign: 'center',
+                                      zIndex: 9999,
                                     }}
                                   >
                                     <div style={{

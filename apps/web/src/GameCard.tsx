@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { Translation } from './i18n'
 import { getGame } from './api'
 import { PlayerCard } from './PlayerCard'
@@ -9,13 +10,49 @@ interface Props {
   onClose: () => void
 }
 
-interface TeamSide {
+interface TeamGame {
   abbrev: string
-  name?: string
-  logo?: string
-  score?: number
-  sog?: number
+  name: string
+  logo: string
+  score: number
   record?: string
+  sog?: number
+}
+
+interface GoalEvent {
+  time: string
+  teamAbbrev: string
+  scorerName: string
+  scorerId?: string
+  scorerHeadshot?: string
+  strength?: string
+  awayScore: number
+  homeScore: number
+}
+
+interface Period {
+  period: number
+  type: 'REG' | 'OT' | 'SO'
+  goals: GoalEvent[]
+}
+
+interface GameData {
+  id: string
+  date: string
+  startTime: string
+  venue?: string
+  attendance?: number
+  status: {
+    state: 'pre' | 'in' | 'post'
+    description: string
+    period?: number
+    clock?: string
+  }
+  home: TeamGame
+  away: TeamGame
+  periods: Period[]
+  shots?: { home: number; away: number }
+  threeStars?: any[]
 }
 
 function abbrevOf(x: any): string {
@@ -25,32 +62,14 @@ function abbrevOf(x: any): string {
   return ''
 }
 
-function fmtTime(timeInPeriod?: string): string {
-  if (!timeInPeriod) return ''
-  return timeInPeriod
-}
-
-function periodLabel(period?: number, periodType?: string, t?: Translation): string {
+function periodLabel(period?: number, type?: string, t?: Translation): string {
   if (!t) return ''
-  if (periodType === 'OT') return t.periodOT
-  if (periodType === 'SO') return t.periodSO
+  if (type === 'OT') return t.periodOT
+  if (type === 'SO') return t.periodSO
   if (period === 1) return t.period1
   if (period === 2) return t.period2
   if (period === 3) return t.period3
   return period ? `${period}` : ''
-}
-
-function statusText(game: any, t: Translation): string {
-  const state = game.gameState
-  const last = game.gameOutcome?.lastPeriodType
-  if (state === 'FINAL' || state === 'OFF') {
-    if (last === 'OT') return t.gameStatusFinalOT
-    if (last === 'SO') return t.gameStatusFinalSO
-    return t.gameStatusFinal
-  }
-  if (state === 'LIVE' || state === 'CRIT') return t.gameStatusLive
-  if (state === 'PRE') return t.gameStatusPre
-  return t.gameStatusScheduled
 }
 
 function strengthLabel(code: string | undefined, t: Translation): string {
@@ -63,7 +82,6 @@ function strengthLabel(code: string | undefined, t: Translation): string {
     case 'SH': return t.strengthSH ?? (isRu ? 'Меньшинство' : 'Short-handed')
     case 'EN': return t.strengthEN ?? (isRu ? 'Пустые ворота' : 'Empty Net')
     case 'PS': return t.strengthPS ?? (isRu ? 'Буллит' : 'Penalty Shot')
-    case 'EA': return t.strengthEA ?? (isRu ? 'Доп. атакующий' : 'Extra Attacker')
     default: return String(code)
   }
 }
@@ -86,7 +104,7 @@ function teamLogoUrl(abbrev: string): string {
 }
 
 function PlayerHeadshot({
-  playerId, teamAbbrev, name, season, size = 64, isHero = false,
+  playerId, teamAbbrev, name, season, size = 64, isHero = false, overrideUrl
 }: {
   playerId?: number | string
   teamAbbrev?: any
@@ -94,10 +112,11 @@ function PlayerHeadshot({
   season: number | string
   size?: number
   isHero?: boolean
+  overrideUrl?: string
 }) {
   const [imgError, setImgError] = useState(false)
   const abbrev = abbrevOf(teamAbbrev)
-  const headshotUrl = playerId && abbrev ? buildHeadshotUrl(playerId, abbrev, season) : null
+  const headshotUrl = overrideUrl || (playerId && abbrev ? buildHeadshotUrl(playerId, abbrev, season) : null)
   const showPhoto = headshotUrl && !imgError
 
   const borderStyle = isHero ? '3px solid #FFD700' : '2px solid var(--accent)'
@@ -133,77 +152,65 @@ function PlayerHeadshot({
   )
 }
 
-function StarCard({
-  star, rank, t, season, onClick,
-}: { star: any; rank: number; t: Translation; season: number | string; onClick: () => void }) {
-  const label = rank === 1 ? t.star1 : rank === 2 ? t.star2 : t.star3
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        flex: 1, padding: '10px 8px',
-        backgroundColor: 'var(--card-bg-alt)', borderRadius: 10, minWidth: 0,
-        cursor: 'pointer', transition: 'background 0.15s',
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--card-bg-alt)' }}
-    >
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: 6, letterSpacing: '0.4px' }}>
-        {label}
-      </div>
-      <div style={{ marginBottom: 6 }}>
-        <PlayerHeadshot playerId={star.playerId} teamAbbrev={star.teamAbbrev} name={star.name?.default} season={season} size={72} />
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', textAlign: 'center', lineHeight: 1.2, marginBottom: 3, minHeight: 30 }}>
-        {star.name?.default ?? '—'}
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
-        {abbrevOf(star.teamAbbrev)}
-      </div>
-      {(star.goals !== undefined || star.assists !== undefined) && (
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
-          {star.goals ?? 0}G {star.assists ?? 0}A
-        </div>
-      )}
-    </div>
-  )
-}
-
 function StrengthBadge({ code, t }: { code: string; t: Translation }) {
   const [hover, setHover] = useState(false)
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  const ref = useRef<HTMLSpanElement>(null)
+
   const label = strengthLabel(code, t)
   const display = String(code).trim().toUpperCase()
 
+  const handleEnter = () => {
+    if (ref.current) {
+      setRect(ref.current.getBoundingClientRect())
+    }
+    setHover(true)
+  }
+
   return (
-    <span
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        position: 'relative', display: 'inline-block',
-        fontSize: 10, padding: '1px 5px',
-        backgroundColor: 'var(--strength-bg)', borderRadius: 3,
-        color: 'var(--strength-text)', fontWeight: 600,
-        textTransform: 'uppercase', cursor: 'help', userSelect: 'none',
-      }}
-    >
-      {display}
-      {hover && (
+    <>
+      <span
+        ref={ref}
+        onMouseEnter={handleEnter}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 10, padding: '1px 6px',
+          backgroundColor: 'var(--strength-bg)', borderRadius: 3,
+          color: 'var(--strength-text)', fontWeight: 600,
+          textTransform: 'uppercase', cursor: 'help', userSelect: 'none',
+        }}
+      >
+        {display}
+      </span>
+      {hover && rect && createPortal(
         <div style={{
-          position: 'absolute', bottom: '100%', right: 0, marginBottom: 6,
-          backgroundColor: 'var(--header-bg)', color: 'var(--header-text)',
-          padding: '4px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500,
-          whiteSpace: 'nowrap', zIndex: 10, boxShadow: '0 2px 8px var(--shadow)', pointerEvents: 'none',
+          position: 'fixed',
+          top: rect.top - 8,
+          left: rect.left + rect.width / 2,
+          transform: 'translate(-50%, -100%)',
+          backgroundColor: '#1e2230', // Жестко заданный непрозрачный цвет
+          color: '#ffffff',
+          padding: '6px 10px',
+          borderRadius: 6,
+          fontSize: 11,
+          fontWeight: 500,
+          whiteSpace: 'nowrap',
+          zIndex: 9999,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.8)',
+          pointerEvents: 'none',
+          border: '1px solid rgba(255,255,255,0.15)', // Четкая рамка для отделения от фона
         }}>
           {label}
-        </div>
+        </div>,
+        document.body
       )}
-    </span>
+    </>
   )
 }
 
 export function GameCard({ gameId, t, onClose }: Props) {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<GameData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | string | null>(null)
@@ -213,7 +220,7 @@ export function GameCard({ gameId, t, onClose }: Props) {
     setLoading(true)
     setError(null)
     getGame(gameId)
-      .then(d => { if (!cancelled) { setData(d); setLoading(false) } })
+      .then(d => { if (!cancelled) { setData(d as GameData); setLoading(false) } })
       .catch(e => { if (!cancelled) { setError(e.message); setLoading(false) } })
     return () => { cancelled = true }
   }, [gameId])
@@ -235,183 +242,119 @@ export function GameCard({ gameId, t, onClose }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [onClose, selectedPlayerId])
 
-  const away: TeamSide = {
-    abbrev: abbrevOf(data?.awayTeam?.abbrev),
-    name: data?.awayTeam?.placeName?.default && data?.awayTeam?.commonName?.default
-      ? `${data.awayTeam.placeName.default} ${data.awayTeam.commonName.default}`
-      : (data?.awayTeam?.commonName?.default ?? data?.awayTeam?.name?.default),
-    logo: teamLogoUrl(abbrevOf(data?.awayTeam?.abbrev)), // <-- ИСПОЛЬЗУЕМ НАШУ ФУНКЦИЮ ДЛЯ _DARK ЛОГОТИПА
-    score: data?.awayTeam?.score,
-    sog: data?.awayTeam?.sog,
-    record: data?.awayTeam?.record,
-  }
-  const home: TeamSide = {
-    abbrev: abbrevOf(data?.homeTeam?.abbrev),
-    name: data?.homeTeam?.placeName?.default && data?.homeTeam?.commonName?.default
-      ? `${data.homeTeam.placeName.default} ${data.homeTeam.commonName.default}`
-      : (data?.homeTeam?.commonName?.default ?? data?.homeTeam?.name?.default),
-    logo: teamLogoUrl(abbrevOf(data?.homeTeam?.abbrev)), // <-- ИСПОЛЬЗУЕМ НАШУ ФУНКЦИЮ ДЛЯ _DARK ЛОГОТИПА
-    score: data?.homeTeam?.score,
-    sog: data?.homeTeam?.sog,
-    record: data?.homeTeam?.record,
-  }
-
-  const finished = data?.gameState === 'FINAL' || data?.gameState === 'OFF'
-  const started = finished || data?.gameState === 'LIVE' || data?.gameState === 'CRIT'
-  const goalsByPeriod: any[] = data?.summary?.scoring ?? []
-  const threeStars: any[] = data?.threeStars ?? []
-  const gameDate = data?.gameDate
-  const startTime = data?.startTimeUTC
-  const venue = data?.venue?.default
-  const attendance = data?.attendance
-  const season = data?.season ?? '20262027'
-
-  const playerGoalCounts: Record<string, number> = {}
-  goalsByPeriod.forEach((p: any) => {
-    p.goals?.forEach((g: any) => {
-      const pid = g.playerId ?? g.scorer?.playerId
-      if (pid) playerGoalCounts[pid] = (playerGoalCounts[pid] || 0) + 1
-    })
-  })
-
-  const regularPeriods = goalsByPeriod.filter((p: any) => {
-    const num = p.periodDescriptor?.number
-    const type = p.periodDescriptor?.periodType
-    return num >= 1 && num <= 3 && (!type || type === 'REG')
-  })
-  const extraPeriods = goalsByPeriod.filter((p: any) => {
-    const num = p.periodDescriptor?.number
-    const type = p.periodDescriptor?.periodType
-    return type === 'OT' || type === 'SO' || num > 3
-  })
+  const finished = data?.status.state === 'post'
+  const started = finished || data?.status.state === 'in'
+  const season = '20262027'
 
   const sectionTitle: React.CSSProperties = {
-    fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, fontWeight: 700, letterSpacing: '0.4px',
+    fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase',
+    marginBottom: 6, fontWeight: 700, letterSpacing: '0.4px',
   }
 
-  const awaySog = away.sog ?? 0
-  const homeSog = home.sog ?? 0
-  const totalSog = awaySog + homeSog
-  const awayPct = totalSog > 0 ? (awaySog / totalSog) * 100 : 50
-  const homePct = totalSog > 0 ? (homeSog / totalSog) * 100 : 50
-
-  const renderGoal = (goal: any, gi: number, total: number) => {
-    const g = goal.goal ?? goal
-    const teamAbbrevStr = abbrevOf(g.teamAbbrev)
-    const playerName = g.name?.default ?? g.firstName?.default
-    const playerId = g.playerId ?? g.scorer?.playerId
-
-    const goalCount = playerId ? (playerGoalCounts[playerId] || 0) : 0
-    const isHero = goalCount >= 3
+  const renderGoal = (goal: GoalEvent, gi: number, total: number) => {
+    const playerGoalCount = data?.periods
+      .flatMap(p => p.goals)
+      .filter(g => g.scorerId && g.scorerId === goal.scorerId).length ?? 0
+    const isHero = playerGoalCount >= 3
 
     return (
       <div key={gi} style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: '10px 0',
-        fontSize: 14,
+        display: 'flex', alignItems: 'center', padding: '10px 0', fontSize: 14,
         borderBottom: gi < total - 1 ? '1px solid var(--border-light)' : 'none',
-        color: 'var(--text)',
-        width: '100%',
+        color: 'var(--text)', width: '100%',
       }}>
-
-        {/* Левая колонка (фиксированная ширина 250px, текст больше никогда не обрежется) */}
         <div style={{ width: 250, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, paddingRight: 10, zIndex: 1 }}>
           <div
-            onClick={() => playerId && setSelectedPlayerId(playerId)}
-            style={{ cursor: playerId ? 'pointer' : 'default', flexShrink: 0 }}
+            onClick={() => goal.scorerId && setSelectedPlayerId(goal.scorerId)}
+            style={{ cursor: goal.scorerId ? 'pointer' : 'default', flexShrink: 0 }}
           >
-            <PlayerHeadshot 
-              playerId={playerId} 
-              teamAbbrev={teamAbbrevStr} 
-              name={playerName} 
-              season={season} 
-              size={64} 
+            <PlayerHeadshot
+              playerId={goal.scorerId}
+              teamAbbrev={goal.teamAbbrev}
+              name={goal.scorerName}
+              season={season}
+              size={64}
               isHero={isHero}
+              overrideUrl={goal.scorerHeadshot}
             />
           </div>
-          
           <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <div
-              onClick={() => playerId && setSelectedPlayerId(playerId)}
+              onClick={() => goal.scorerId && setSelectedPlayerId(goal.scorerId)}
               style={{
                 fontSize: 15, fontWeight: 700, color: isHero ? '#FFD700' : 'var(--text)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                lineHeight: 1.25, cursor: playerId ? 'pointer' : 'default',
+                lineHeight: 1.25, cursor: goal.scorerId ? 'pointer' : 'default',
               }}
-              onMouseEnter={(e) => { if (playerId) e.currentTarget.style.color = 'var(--accent)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = isHero ? '#FFD700' : 'var(--text)' }}
             >
-              {playerName}
-              {isHero && (
-                <span style={{ marginLeft: 6, fontSize: 12, color: '#FFD700' }}>
-                  ⭐ {goalCount}
-                </span>
-              )}
+              {goal.scorerName}
+              {isHero && <span style={{ marginLeft: 6, fontSize: 12, color: '#FFD700' }}>{'\u2B50'} {playerGoalCount}</span>}
             </div>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 4,
               fontSize: 12, color: 'var(--text-muted)', marginTop: 3,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtTime(g.timeInPeriod)}</span>
-              <span>·</span>
-              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{teamAbbrevStr}</span>
-              {g.strength && (
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{goal.time}</span>
+              <span>{'\u00B7'}</span>
+              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{goal.teamAbbrev}</span>
+              {goal.strength && (
                 <>
-                  <span>·</span>
-                  <StrengthBadge code={g.strength} t={t} />
+                  <span>{'\u00B7'}</span>
+                  <StrengthBadge code={goal.strength} t={t} />
                 </>
               )}
             </div>
           </div>
         </div>
 
-        {/* Центральная колонка (растягивается на всё оставшееся место, центрирует логотип со сдвигом влево) */}
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 0, minWidth: 0 }}>
-          {teamAbbrevStr && (
+          {goal.teamAbbrev && (
             <img
-              src={teamLogoUrl(teamAbbrevStr)}
+              src={teamLogoUrl(goal.teamAbbrev)}
               alt=""
-              title={teamAbbrevStr}
+              title={goal.teamAbbrev}
               style={{
-                width: 80, 
-                height: 80, 
-                objectFit: 'contain', 
-                opacity: 0.15,
+                width: 80, height: 80, objectFit: 'contain', opacity: 0.3,
                 filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.25))',
-                pointerEvents: 'none',
-                transform: 'translateX(-30px)'
+                pointerEvents: 'none', transform: 'translateX(-30px)',
               }}
             />
           )}
         </div>
 
-        {/* Правая колонка (фиксированная ширина 60px, счет прижат вправо) */}
         <div style={{ width: 60, flexShrink: 0, display: 'flex', justifyContent: 'flex-end', zIndex: 1 }}>
           <span style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
-            {g.awayScore}–{g.homeScore}
+            {goal.awayScore}{'\u2013'}{goal.homeScore}
           </span>
         </div>
-
       </div>
     )
   }
 
-  const renderPeriodCard = (period: any, keyPrefix: string) => (
+  const renderPeriodCard = (period: Period, keyPrefix: string) => (
     <div
-      key={`${keyPrefix}-${period.periodDescriptor?.number ?? 'x'}-${period.periodDescriptor?.periodType ?? 'REG'}`}
-      style={{ backgroundColor: 'rgba(15, 20, 30, 0.45)', borderRadius: 10, padding: '10px 14px', border: '1px solid rgba(255,255,255,0.06)' }}
+      key={`${keyPrefix}-${period.period}-${period.type}`}
+      style={{ backgroundColor: 'rgba(15, 20, 30, 0.55)', borderRadius: 10, padding: '10px 14px', border: '1px solid rgba(255,255,255,0.06)' }}
     >
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-        {periodLabel(period.periodDescriptor?.number, period.periodDescriptor?.periodType, t)}
+        {periodLabel(period.period, period.type, t)}
       </div>
-      {period.goals?.length > 0
-        ? period.goals.map((goal: any, gi: number) => renderGoal(goal, gi, period.goals.length))
+      {period.goals.length > 0
+        ? period.goals.map((g, i) => renderGoal(g, i, period.goals.length))
         : <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '2px 0' }}>{t.gameNoGoals}</div>
       }
     </div>
   )
+
+  const regularPeriods = data?.periods.filter(p => p.type === 'REG') ?? []
+  const extraPeriods = data?.periods.filter(p => p.type === 'OT' || p.type === 'SO') ?? []
+
+  const awaySog = data?.shots?.away ?? 0
+  const homeSog = data?.shots?.home ?? 0
+  const totalSog = awaySog + homeSog
+  const awayPct = totalSog > 0 ? (awaySog / totalSog) * 100 : 50
+  const homePct = totalSog > 0 ? (homeSog / totalSog) * 100 : 50
 
   return (
     <>
@@ -419,47 +362,37 @@ export function GameCard({ gameId, t, onClose }: Props) {
         onClick={onClose}
         style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'var(--overlay)', zIndex: 1200,
-          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+          // Сделал подложку более плотной, чтобы элементы страницы не просвечивали сквозь модалку
+          backgroundColor: 'rgba(0, 0, 0, 0.85)', zIndex: 1200,
+          backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
         }}
       />
       <div style={{
-        position: 'fixed',
-        top: '50%', left: '50%',
-        transform: 'translate(-50%, -50%)',
-        width: 'min(1600px, calc(100vw - 16px))',
-        maxHeight: 'calc(100vh - 16px)',
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+        width: 'min(1600px, calc(100vw - 16px))', maxHeight: 'calc(100vh - 16px)',
         backgroundColor: '#0f1115',
-        backgroundImage: 'linear-gradient(180deg, rgba(15,17,21,0.45) 0%, rgba(15,17,21,0.8) 50%, rgba(15,17,21,0.92) 100%), url("/bg/main-bg.jpg")',
-        backgroundSize: 'cover, cover',
-        backgroundPosition: 'center, center',
-        backgroundRepeat: 'no-repeat, no-repeat',
-        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        zIndex: 1201,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+        // Возвращаем картинку льда. Градиент затемняет её, но не перекрывает полностью.
+        backgroundImage: 'linear-gradient(180deg, rgba(15,17,21,0.5) 0%, rgba(15,17,21,0.85) 50%, rgba(15,17,21,0.95) 100%), url("/bg/main-bg.jpg")',
+        backgroundSize: 'cover, cover', backgroundPosition: 'center, center', backgroundRepeat: 'no-repeat, no-repeat',
+        border: '1px solid var(--border)', borderRadius: 12, zIndex: 1201,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
         <div style={{
-          padding: '10px 18px', backgroundColor: 'rgba(10, 30, 55, 0.7)',
-          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+          padding: '10px 18px', backgroundColor: 'rgba(10, 30, 55, 0.9)',
           borderBottom: '1px solid rgba(255,255,255,0.08)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
         }}>
           <h2 style={{ margin: 0, fontSize: 16, color: '#fff', fontWeight: 800 }}>{t.gameDetails}</h2>
           <button
             onClick={onClose}
             style={{
               border: 'none', background: 'rgba(255,255,255,0.1)', fontSize: 22,
-              cursor: 'pointer', color: '#fff',
-              width: 32, height: 32, borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              lineHeight: 1,
+              cursor: 'pointer', color: '#fff', width: 32, height: 32, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
             }}
           >
-            ×
+            {'\u00D7'}
           </button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '12px 20px' }}>
@@ -471,103 +404,85 @@ export function GameCard({ gameId, t, onClose }: Props) {
                 fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', marginBottom: 10,
                 display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: 6,
               }}>
-                {gameDate && <span>{new Date(gameDate + 'T12:00:00Z').toLocaleDateString(t.locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>}
-                {startTime && !started && (
+                {data.date && <span>{new Date(data.date + 'T12:00:00Z').toLocaleDateString(t.locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>}
+                {data.startTime && !started && (
                   <>
-                    <span style={{ opacity: 0.5 }}>·</span>
-                    <span>{new Date(startTime).toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span style={{ opacity: 0.5 }}>{'\u00B7'}</span>
+                    <span>{new Date(data.startTime).toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' })}</span>
                   </>
                 )}
-                {venue && <><span style={{ opacity: 0.5 }}>·</span><span>{venue}</span></>}
-                {attendance !== undefined && <><span style={{ opacity: 0.5 }}>·</span><span>{attendance.toLocaleString(t.locale)}</span></>}
-                <span style={{ opacity: 0.5 }}>·</span>
+                {data.venue && <><span style={{ opacity: 0.5 }}>{'\u00B7'}</span><span>{data.venue}</span></>}
+                {data.attendance !== undefined && <><span style={{ opacity: 0.5 }}>{'\u00B7'}</span><span>{data.attendance.toLocaleString(t.locale)}</span></>}
+                <span style={{ opacity: 0.5 }}>{'\u00B7'}</span>
                 <span style={{
                   fontWeight: 600,
-                  color: finished ? 'var(--text-secondary)' : (data.gameState === 'LIVE' || data.gameState === 'CRIT') ? 'var(--loss)' : 'var(--accent)',
+                  color: finished ? 'var(--text-secondary)' : data.status.state === 'in' ? 'var(--loss)' : 'var(--accent)',
                 }}>
-                  {statusText(data, t)}
+                  {data.status.description}
                 </span>
               </div>
 
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24,
                 padding: '12px 16px', marginBottom: 12,
-                backgroundColor: 'rgba(15, 20, 30, 0.45)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10,
+                backgroundColor: 'rgba(15, 20, 30, 0.6)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10,
               }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
-                  <img src={away.logo} alt="" width={100} height={100} style={{ objectFit: 'contain' }} />
-                  <div style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--text)', textAlign: 'center', lineHeight: 1.2 }}>{away.name}</div>
-                  {away.record && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{away.record}</div>}
+                  <img src={data.away.logo} alt="" width={100} height={100} style={{ objectFit: 'contain' }} />
+                  <div style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--text)', textAlign: 'center', lineHeight: 1.2 }}>{data.away.name}</div>
+                  {data.away.record && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{data.away.record}</div>}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 12px', minWidth: 150 }}>
                   <div style={{ fontSize: 48, fontWeight: 'bold', color: 'var(--accent)', letterSpacing: '1px', lineHeight: 1 }}>
-                    {started ? `${away.score ?? 0} – ${home.score ?? 0}` : '— : —'}
+                    {started ? `${data.away.score} \u2013 ${data.home.score}` : '\u2014 : \u2014'}
                   </div>
-                  {!started && startTime && (
+                  {!started && data.startTime && (
                     <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 6 }}>
-                      {new Date(startTime).toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(data.startTime).toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   )}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
-                  <img src={home.logo} alt="" width={100} height={100} style={{ objectFit: 'contain' }} />
-                  <div style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--text)', textAlign: 'center', lineHeight: 1.2 }}>{home.name}</div>
-                  {home.record && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{home.record}</div>}
+                  <img src={data.home.logo} alt="" width={100} height={100} style={{ objectFit: 'contain' }} />
+                  <div style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--text)', textAlign: 'center', lineHeight: 1.2 }}>{data.home.name}</div>
+                  {data.home.record && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{data.home.record}</div>}
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: threeStars.length > 0 ? 'minmax(0, 1fr) minmax(0, 2fr)' : '1fr', gap: 12, marginBottom: 12 }}>
-                {(away.sog !== undefined || home.sog !== undefined) && (
-                  <div>
-                    <div style={sectionTitle}>{t.shotsLabel}</div>
-                    <div style={{ padding: '12px 14px', backgroundColor: 'rgba(15, 20, 30, 0.45)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <span style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: 16, minWidth: 28, textAlign: 'left', fontVariantNumeric: 'tabular-nums' }}>{awaySog}</span>
-                        <div style={{ flex: 1, height: 10, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 5, display: 'flex', overflow: 'hidden' }}>
-                          <div style={{ width: `${awayPct}%`, backgroundColor: 'var(--accent)' }} />
-                          <div style={{ width: `${homePct}%`, backgroundColor: '#e25c5c' }} />
-                        </div>
-                        <span style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: 16, minWidth: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{homeSog}</span>
+              {data.shots && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={sectionTitle}>{t.shotsLabel}</div>
+                  <div style={{ padding: '12px 14px', backgroundColor: 'rgba(15, 20, 30, 0.6)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: 16, minWidth: 28, textAlign: 'left', fontVariantNumeric: 'tabular-nums' }}>{awaySog}</span>
+                      <div style={{ flex: 1, height: 10, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 5, display: 'flex', overflow: 'hidden' }}>
+                        <div style={{ width: `${awayPct}%`, backgroundColor: 'var(--accent)' }} />
+                        <div style={{ width: `${homePct}%`, backgroundColor: '#e25c5c' }} />
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.4px', fontWeight: 600 }}>
-                        <span>{away.abbrev}</span>
-                        <span>{home.abbrev}</span>
-                      </div>
+                      <span style={{ fontWeight: 'bold', color: 'var(--text)', fontSize: 16, minWidth: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{homeSog}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.4px', fontWeight: 600 }}>
+                      <span>{data.away.abbrev}</span>
+                      <span>{data.home.abbrev}</span>
                     </div>
                   </div>
-                )}
-                {threeStars.length > 0 && (
-                  <div>
-                    <div style={sectionTitle}>{t.threeStars}</div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      {threeStars.map((s: any) => (
-                        <StarCard
-                          key={s.star}
-                          star={s}
-                          rank={s.star}
-                          t={t}
-                          season={season}
-                          onClick={() => s.playerId && setSelectedPlayerId(s.playerId)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              {goalsByPeriod.length > 0 && (
+                </div>
+              )}
+
+              {data.periods.length > 0 && (
                 <div>
                   <div style={sectionTitle}>{t.goalScorers}</div>
                   {regularPeriods.length > 0 && (
                     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${regularPeriods.length}, minmax(0, 1fr))`, gap: 10, marginBottom: extraPeriods.length > 0 ? 10 : 0 }}>
-                      {regularPeriods.map((p: any) => renderPeriodCard(p, 'reg'))}
+                      {regularPeriods.map(p => renderPeriodCard(p, 'reg'))}
                     </div>
                   )}
                   {extraPeriods.length > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
-                      {extraPeriods.map((p: any) => (
-                        <div key={`${p.periodDescriptor?.periodType ?? 'X'}`} style={{ flex: '0 1 600px', minWidth: 0 }}>
+                      {extraPeriods.map(p => (
+                        <div key={`${p.type}-${p.period}`} style={{ flex: '0 1 600px', minWidth: 0 }}>
                           {renderPeriodCard(p, 'extra')}
                         </div>
                       ))}
@@ -575,6 +490,7 @@ export function GameCard({ gameId, t, onClose }: Props) {
                   )}
                 </div>
               )}
+
               {!started && (
                 <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, padding: '12px 0' }}>
                   {t.gameNotStarted}
@@ -585,11 +501,7 @@ export function GameCard({ gameId, t, onClose }: Props) {
         </div>
       </div>
       {selectedPlayerId && (
-        <PlayerCard
-          playerId={selectedPlayerId}
-          t={t}
-          onClose={() => setSelectedPlayerId(null)}
-        />
+        <PlayerCard playerId={selectedPlayerId} t={t} onClose={() => setSelectedPlayerId(null)} />
       )}
     </>
   )

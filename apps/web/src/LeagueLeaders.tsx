@@ -26,6 +26,19 @@ function PlayerInitials({ name, size = 36 }: { name?: string; size?: number }) {
   )
 }
 
+function TeamLogo({ abbrev, size = 22 }: { abbrev?: string; size?: number }) {
+  if (!abbrev) return null;
+  return (
+    <img 
+      src={`https://assets.nhle.com/logos/nhl/svg/${abbrev}_dark.svg`} 
+      alt={abbrev} 
+      width={size} 
+      height={size} 
+      style={{ objectFit: 'contain', flexShrink: 0 }} 
+    />
+  )
+}
+
 type Category = 'points' | 'goals' | 'assists' | 'wins' | 'savePctg' | 'goalsAgainstAvg' | 'shutouts'
 
 function formatValue(value: any, category: Category): string {
@@ -40,9 +53,13 @@ function formatValue(value: any, category: Category): string {
 }
 
 function playerName(p: any): string {
-  return p.firstName?.default && p.lastName?.default
-    ? `${p.firstName.default} ${p.lastName.default}`
-    : (p.name?.default ?? '—')
+  if (!p) return '—'
+  if (typeof p.name === 'string' && p.name) return p.name
+  if (p.name?.default) return p.name.default
+  if (p.firstName?.default && p.lastName?.default) {
+    return `${p.firstName.default} ${p.lastName.default}`
+  }
+  return '—'
 }
 
 const MEDALS = {
@@ -145,14 +162,19 @@ function PodiumCard({
           {name}
         </div>
         <div style={{
-          fontSize: 12,
-          color: 'var(--text-muted)',
-          marginTop: 4,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
+          display: 'flex', alignItems: 'center', gap: 8, marginTop: 6,
         }}>
-          {player.teamAbbrev}{player.position ? ` · ${player.position}` : ''}
+          <TeamLogo abbrev={player.teamAbbrev} size={28} />
+          <span style={{
+            fontSize: 13,
+            color: 'var(--text-muted)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            fontWeight: 600,
+          }}>
+            {player.teamAbbrev}{player.position ? ` · ${player.position}` : ''}
+          </span>
         </div>
       </div>
 
@@ -209,8 +231,11 @@ function CompactRow({
         }}>
           {name}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.2 }}>
-          {player.teamAbbrev}{player.position ? ` · ${player.position}` : ''}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, lineHeight: 1.2, marginTop: 3 }}>
+          <TeamLogo abbrev={player.teamAbbrev} size={22} />
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {player.teamAbbrev}{player.position ? ` · ${player.position}` : ''}
+          </span>
         </div>
       </div>
       <span style={{ fontSize: 14, fontWeight: 'bold', color: 'var(--accent)', minWidth: 32, textAlign: 'right' }}>
@@ -221,16 +246,17 @@ function CompactRow({
 }
 
 function LeaderCard({
-  title, players, valueLabel, category, onPlayerClick,
+  title, players, valueLabel, category, onPlayerClick, tooltip
 }: {
   title: string
   players: any[]
   valueLabel: string
   category: Category
   onPlayerClick: (playerId: number) => void
+  tooltip?: string
 }) {
   if (!players || players.length === 0) return null
-  const top = players.slice(0, 10)
+  const top = players.slice(0, 5)
   const podium = top.slice(0, 3) as any[]
   const rest = top.slice(3)
 
@@ -241,14 +267,27 @@ function LeaderCard({
       overflow: 'hidden', boxShadow: '0 1px 3px var(--shadow)',
       display: 'flex', flexDirection: 'column',
     }}>
-      <div style={{
-        padding: '9px 13px', backgroundColor: 'var(--header-bg)',
-        color: 'var(--header-text)', fontWeight: 'bold', fontSize: 13,
-        textTransform: 'uppercase', letterSpacing: '0.4px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      }}>
+      <div 
+        style={{
+          padding: '9px 13px', backgroundColor: 'var(--header-bg)',
+          color: 'var(--header-text)', fontWeight: 'bold', fontSize: 13,
+          textTransform: 'uppercase', letterSpacing: '0.4px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}
+      >
         <span>{title}</span>
-        <span style={{ fontSize: 10, opacity: 0.75 }}>{valueLabel}</span>
+        <span 
+          title={tooltip}
+          style={{ 
+            fontSize: 11, 
+            opacity: 0.8, 
+            textDecoration: tooltip ? 'underline dotted' : 'none',
+            textUnderlineOffset: '3px',
+            cursor: tooltip ? 'help' : 'default',
+          }}
+        >
+          {valueLabel}
+        </span>
       </div>
 
       {podium.length > 0 && (
@@ -302,18 +341,40 @@ export function LeagueLeaders({ season, t, onPlayerClick }: Props) {
 
   const skaters = data?.skaters ?? {}
   const goalies = data?.goalies ?? {}
+  const isRu = t.locale === 'ru-RU'
 
   const skaterCards = [
-    { title: t.topPoints, players: skaters.points ?? [], valueLabel: t.ptsShort, category: 'points' as Category },
-    { title: t.topGoals, players: skaters.goals ?? [], valueLabel: t.gShort, category: 'goals' as Category },
-    { title: t.topAssists, players: skaters.assists ?? [], valueLabel: t.assistsCol, category: 'assists' as Category },
+    { 
+      title: t.topPoints, players: skaters.points ?? [], valueLabel: t.ptsShort, category: 'points' as Category,
+      tooltip: isRu ? 'Очки (Голы + Передачи)' : 'Points (Goals + Assists)'
+    },
+    { 
+      title: t.topGoals, players: skaters.goals ?? [], valueLabel: t.gShort, category: 'goals' as Category,
+      tooltip: isRu ? 'Заброшенные шайбы' : 'Goals'
+    },
+    { 
+      title: t.topAssists, players: skaters.assists ?? [], valueLabel: t.assistsCol, category: 'assists' as Category,
+      tooltip: isRu ? 'Голевые передачи' : 'Assists'
+    },
   ].filter(c => c.players.length > 0)
 
   const goalieCards = [
-    { title: t.topWins, players: goalies.wins ?? [], valueLabel: t.wShort, category: 'wins' as Category },
-    { title: t.topSavePctg, players: goalies.savePctg ?? [], valueLabel: t.savePctgStat, category: 'savePctg' as Category },
-    { title: t.topGaa, players: goalies.goalsAgainstAvg ?? [], valueLabel: t.gaaStat, category: 'goalsAgainstAvg' as Category },
-    { title: t.topShutouts, players: goalies.shutouts ?? [], valueLabel: t.shutoutsStat, category: 'shutouts' as Category },
+    { 
+      title: t.topWins, players: goalies.wins ?? [], valueLabel: t.wShort, category: 'wins' as Category,
+      tooltip: isRu ? 'Победы вратаря' : 'Goalie Wins'
+    },
+    { 
+      title: t.topSavePctg, players: goalies.savePctg ?? [], valueLabel: t.savePctgStat, category: 'savePctg' as Category,
+      tooltip: isRu ? 'Процент отраженных бросков' : 'Save Percentage'
+    },
+    { 
+      title: t.topGaa, players: goalies.goalsAgainstAvg ?? [], valueLabel: t.gaaStat, category: 'goalsAgainstAvg' as Category, 
+      tooltip: isRu ? 'Среднее количество пропущенных шайб за игру' : 'Goals Against Average' 
+    },
+    { 
+      title: t.topShutouts, players: goalies.shutouts ?? [], valueLabel: t.shutoutsStat, category: 'shutouts' as Category,
+      tooltip: isRu ? 'Сухие игры (матчи без пропущенных шайб)' : 'Shutouts'
+    },
   ].filter(c => c.players.length > 0)
 
   const skaterGrid: React.CSSProperties = {
@@ -321,9 +382,11 @@ export function LeagueLeaders({ season, t, onPlayerClick }: Props) {
     gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
     gap: 12,
   }
+  
+  // Увеличили минимальную ширину до 600px, чтобы принудительно сделать 2 колонки на широких экранах
   const goalieGrid: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 600px), 1fr))',
     gap: 12,
   }
 
@@ -334,7 +397,7 @@ export function LeagueLeaders({ season, t, onPlayerClick }: Props) {
           <SectionHeader title={t.skaters} />
           <div style={skaterGrid}>
             {skaterCards.map(c => (
-              <LeaderCard key={c.title} title={c.title} players={c.players} valueLabel={c.valueLabel} category={c.category} onPlayerClick={onPlayerClick} />
+              <LeaderCard key={c.title} title={c.title} players={c.players} valueLabel={c.valueLabel} category={c.category} onPlayerClick={onPlayerClick} tooltip={c.tooltip} />
             ))}
           </div>
         </div>
@@ -345,7 +408,7 @@ export function LeagueLeaders({ season, t, onPlayerClick }: Props) {
           <SectionHeader title={t.goalieLeaders} />
           <div style={goalieGrid}>
             {goalieCards.map(c => (
-              <LeaderCard key={c.title} title={c.title} players={c.players} valueLabel={c.valueLabel} category={c.category} onPlayerClick={onPlayerClick} />
+              <LeaderCard key={c.title} title={c.title} players={c.players} valueLabel={c.valueLabel} category={c.category} onPlayerClick={onPlayerClick} tooltip={c.tooltip} />
             ))}
           </div>
         </div>

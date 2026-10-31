@@ -18,7 +18,6 @@ function getLocalDate(input: string | Date): string {
   return `${year}-${month}-${day}`
 }
 
-// ФУНКЦИЯ ДЛЯ ПРАВИЛЬНОГО (СВЕТЛОГО) ЛОГОТИПА
 function teamLogoUrl(logo?: string, abbrev?: string): string {
   if (logo) {
     return logo.replace('_light', '_dark')
@@ -101,7 +100,7 @@ function MatchRow({
       style={{
         display: 'flex',
         alignItems: 'center',
-        padding: '14px 12px',
+        padding: '16px 12px',
         borderBottom: '1px solid var(--border-light)',
         cursor: onClick ? 'pointer' : 'default',
       }}
@@ -114,11 +113,12 @@ function MatchRow({
           <span style={{
             fontWeight: awayWon ? 'bold' : 'normal',
             color: 'var(--text)',
-            fontSize: 14,
+            fontSize: 16,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             maxWidth: '100%',
+            lineHeight: 1.4, // Увеличили, чтобы буквы не наезжали
           }}>
             {game.awayTeam.name}
           </span>
@@ -128,7 +128,7 @@ function MatchRow({
             textTransform: 'uppercase',
             fontWeight: 600,
             letterSpacing: '0.4px',
-            marginTop: 2,
+            marginTop: 6, // Увеличили отступ
           }}>
             {t.awayLabel}
           </span>
@@ -136,8 +136,8 @@ function MatchRow({
         <img 
           src={teamLogoUrl(game.awayTeam.logo, game.awayTeam.abbrev)} 
           alt="" 
-          width={56} 
-          height={56} 
+          width={52} 
+          height={52} 
           style={{ 
             objectFit: 'contain', 
             flexShrink: 0,
@@ -147,9 +147,9 @@ function MatchRow({
       </div>
 
       {/* Счёт / время + прогнозы */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 110, flexShrink: 0, margin: '0 4px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 100, flexShrink: 0, margin: '0 4px' }}>
         <div style={{
-          width: 90,
+          width: 86,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -160,20 +160,19 @@ function MatchRow({
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2, textTransform: 'uppercase', minHeight: 12 }}>
             {!showTime ? periodLabel : ''}
           </div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: showTime ? 'var(--text-secondary)' : 'var(--score-text)' }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: showTime ? 'var(--text-secondary)' : 'var(--score-text)' }}>
             {showTime
               ? formatTime(game.startTimeUTC, t.locale)
               : `${game.awayTeam.score ?? 0} - ${game.homeTeam.score ?? 0}`}
           </div>
         </div>
 
-        {/* Кнопки прогнозов (показываем только для будущих матчей) */}
         {showTime && onPredict && (
           <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
             <button
               onClick={(e) => { e.stopPropagation(); onPredict('AWAY') }}
               style={{
-                padding: '2px 8px', fontSize: 10, borderRadius: 4, border: '1px solid var(--border)',
+                padding: '2px 6px', fontSize: 10, borderRadius: 4, border: '1px solid var(--border)',
                 backgroundColor: prediction === 'AWAY' ? 'var(--accent)' : 'transparent',
                 color: prediction === 'AWAY' ? '#fff' : 'var(--text-muted)',
                 cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
@@ -184,7 +183,7 @@ function MatchRow({
             <button
               onClick={(e) => { e.stopPropagation(); onPredict('HOME') }}
               style={{
-                padding: '2px 8px', fontSize: 10, borderRadius: 4, border: '1px solid var(--border)',
+                padding: '2px 6px', fontSize: 10, borderRadius: 4, border: '1px solid var(--border)',
                 backgroundColor: prediction === 'HOME' ? 'var(--accent)' : 'transparent',
                 color: prediction === 'HOME' ? '#fff' : 'var(--text-muted)',
                 cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s'
@@ -195,7 +194,6 @@ function MatchRow({
           </div>
         )}
 
-        {/* Результат прогноза (для завершенных матчей) */}
         {!showTime && prediction && (
           <div style={{ fontSize: 11, marginTop: 6, fontWeight: 'bold', color: isCorrect ? 'var(--win)' : 'var(--loss)' }}>
             {isCorrect ? '✅ ' + t.predictionCorrect : '❌ ' + t.predictionWrong}
@@ -208,8 +206,8 @@ function MatchRow({
         <img 
           src={teamLogoUrl(game.homeTeam.logo, game.homeTeam.abbrev)} 
           alt="" 
-          width={56} 
-          height={56} 
+          width={52} 
+          height={52} 
           style={{ 
             objectFit: 'contain', 
             flexShrink: 0,
@@ -220,11 +218,12 @@ function MatchRow({
           <span style={{
             fontWeight: homeWon ? 'bold' : 'normal',
             color: 'var(--text)',
-            fontSize: 14,
+            fontSize: 16,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             maxWidth: '100%',
+            lineHeight: 1.4, // Увеличили
           }}>
             {game.homeTeam.name}
           </span>
@@ -234,7 +233,7 @@ function MatchRow({
             textTransform: 'uppercase',
             fontWeight: 700,
             letterSpacing: '0.4px',
-            marginTop: 2,
+            marginTop: 6, // Увеличили
           }}>
             {t.homeLabel}
           </span>
