@@ -242,7 +242,6 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
   const age = calcAge(data?.birthDate)
   const birthDate = data?.birthDate
   
-  // Безопасное извлечение города и страны
   const birthCityRaw = data?.birthCity
   const birthCity = typeof birthCityRaw === 'string' ? birthCityRaw : birthCityRaw?.default
 
@@ -360,9 +359,16 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
                   <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.2, textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
                     {data.firstName?.default} {data.lastName?.default}
                   </div>
-                  <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
-                    {data.sweaterNumber ? `#${data.sweaterNumber} · ` : ''}
-                    {pos} · {data.shootsCatches === 'L' ? 'L' : 'R'}
+                  <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>
+                      {data.sweaterNumber ? `#${data.sweaterNumber} · ` : ''}
+                      {pos} · {data.shootsCatches === 'L' ? 'L' : 'R'}
+                    </span>
+                    {data.injury && (
+                      <span style={{ padding: '2px 6px', backgroundColor: 'var(--injury-bg, rgba(255,100,100,0.2))', color: 'var(--injury-text, #ff6b6b)', borderRadius: 4, fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                        {data.injury}
+                      </span>
+                    )}
                   </div>
                   {data.currentTeamAbbrev && (
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6, padding: '2px 8px', backgroundColor: 'rgba(74, 158, 255, 0.15)', borderRadius: 4 }}>

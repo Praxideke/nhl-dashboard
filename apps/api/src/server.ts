@@ -8,7 +8,7 @@ import {
   fetchStandingsRaw, fetchScheduleRaw, fetchTeamSchedule, fetchStandingsSeasons,
   fetchPlayoffBracket, fetchTeamRoster, fetchEspnRoster, fetchPlayer, fetchGameSummary,
   fetchClubStats, fetchSkaterLeaders, fetchGoalieLeaders, fetchEspnInjuries, fetchPlayerSearch,
-  fetchEspnNews, fetchTeamLast5, fetchCalendarRaw,
+  fetchEspnNews, fetchTeamLast5, fetchCalendarRaw, fetchTeamDetails,
 } from './nhl';
 import { cached } from './cache';
 
@@ -169,7 +169,7 @@ app.get('/api/injuries', async (req) => {
 
 app.get('/api/game/:id', async (req) => {
   const { id } = req.params as { id: string };
-  const cacheKey = `game-summary:${id}`;
+  const cacheKey = `game-summary:${id}:v2`; // Сброс кэша
   return cached(cacheKey, 30_000, async () => {
     return await fetchGameSummary(id);
   });
@@ -197,7 +197,7 @@ app.get('/api/leaders', async (req) => {
 
 app.get('/api/player/:id', async (req) => {
   const { id } = req.params as { id: string };
-  return cached(`player:${id}:v17`, 300_000, async () => {
+  return cached(`player:${id}:v20`, 300_000, async () => {
     return await fetchPlayer(id);
   });
 });
@@ -210,7 +210,15 @@ app.get('/api/calendar', async (req) => {
   });
 });
 
-app.get('/api/team/:abbrev', async () => ({ roster: { forwards: [], defensemen: [], goalies: [] }, past: [], future: [], leaders: null }));
+app.get('/api/team/:abbrev', async (req) => {
+  const { abbrev } = req.params as { abbrev: string };
+  const { season } = req.query as { season?: string };
+  const seasonKey = season || '20232024';
+  return cached(`team:${abbrev}:${seasonKey}:v8`, 300_000, async () => {
+    return await fetchTeamDetails(abbrev, seasonKey);
+  });
+});
+
 app.get('/api/search-player', async (req) => {
   const { q } = req.query as { q?: string };
   if (!q || q.length < 2) return [];

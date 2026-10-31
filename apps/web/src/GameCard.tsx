@@ -189,7 +189,7 @@ function StrengthBadge({ code, t }: { code: string; t: Translation }) {
           top: rect.top - 8,
           left: rect.left + rect.width / 2,
           transform: 'translate(-50%, -100%)',
-          backgroundColor: '#1e2230', // Жестко заданный непрозрачный цвет
+          backgroundColor: '#1e2230',
           color: '#ffffff',
           padding: '6px 10px',
           borderRadius: 6,
@@ -199,7 +199,7 @@ function StrengthBadge({ code, t }: { code: string; t: Translation }) {
           zIndex: 9999,
           boxShadow: '0 4px 12px rgba(0,0,0,0.8)',
           pointerEvents: 'none',
-          border: '1px solid rgba(255,255,255,0.15)', // Четкая рамка для отделения от фона
+          border: '1px solid rgba(255,255,255,0.15)',
         }}>
           {label}
         </div>,
@@ -249,6 +249,32 @@ export function GameCard({ gameId, t, onClose }: Props) {
   const sectionTitle: React.CSSProperties = {
     fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase',
     marginBottom: 6, fontWeight: 700, letterSpacing: '0.4px',
+  }
+
+  const getStatusText = (): string => {
+    if (!data) return ''
+    const isRu = t.locale === 'ru-RU'
+    const desc = data.status.description?.toLowerCase() || ''
+    const state = data.status.state
+    const period = data.status.period
+
+    if (state === 'in') {
+      if (period === 1) return isRu ? 'Идёт 1-й период' : 'In Progress (1st Period)'
+      if (period === 2) return isRu ? 'Идёт 2-й период' : 'In Progress (2nd Period)'
+      if (period === 3) return isRu ? 'Идёт 3-й период' : 'In Progress (3rd Period)'
+      if (period === 4 || desc.includes('ot')) return isRu ? 'Идёт овертайм' : 'In Progress (OT)'
+      if (period === 5 || desc.includes('so')) return isRu ? 'Идёт серия буллитов' : 'In Progress (SO)'
+      return isRu ? 'Идёт матч' : 'In Progress'
+    }
+    if (desc.includes('final')) {
+      if (desc.includes('ot')) return t.finalOT || 'Final/OT'
+      if (desc.includes('so')) return t.finalSO || 'Final/SO'
+      return t.final || 'Final'
+    }
+    if (desc.includes('scheduled') || desc.includes('pre-game') || state === 'pre') {
+      return isRu ? 'Запланирован' : 'Scheduled'
+    }
+    return data.status.description
   }
 
   const renderGoal = (goal: GoalEvent, gi: number, total: number) => {
@@ -332,22 +358,45 @@ export function GameCard({ gameId, t, onClose }: Props) {
     )
   }
 
-  const renderPeriodCard = (period: Period, keyPrefix: string) => (
+  const renderPeriodCard = (period: Period, keyPrefix: string, isCurrent: boolean) => (
     <div
       key={`${keyPrefix}-${period.period}-${period.type}`}
-      style={{ backgroundColor: 'rgba(15, 20, 30, 0.55)', borderRadius: 10, padding: '10px 14px', border: '1px solid rgba(255,255,255,0.06)' }}
+      style={{ 
+        backgroundColor: 'rgba(15, 20, 30, 0.55)', 
+        borderRadius: 10, 
+        padding: '10px 14px', 
+        border: isCurrent ? '1px solid var(--accent)' : '1px solid rgba(255,255,255,0.06)', 
+        height: '100%', 
+        minHeight: 60,
+        boxShadow: isCurrent ? '0 0 10px rgba(74, 158, 255, 0.2)' : 'none'
+      }}
     >
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-        {periodLabel(period.period, period.type, t)}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        {isCurrent && (
+          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', backgroundColor: 'var(--loss)', boxShadow: '0 0 6px var(--loss)' }} />
+        )}
+        <div style={{ fontSize: 11, fontWeight: 700, color: isCurrent ? 'var(--text)' : 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+          {periodLabel(period.period, period.type, t)}
+        </div>
       </div>
-      {period.goals.length > 0
-        ? period.goals.map((g, i) => renderGoal(g, i, period.goals.length))
-        : <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '2px 0' }}>{t.gameNoGoals}</div>
-      }
+      {period.goals.length > 0 && (
+        period.goals.map((g, i) => renderGoal(g, i, period.goals.length))
+      )}
     </div>
   )
 
-  const regularPeriods = data?.periods.filter(p => p.type === 'REG') ?? []
+  // Всегда показываем 3 периода для регулярного времени
+  const regularPeriodNumbers = [1, 2, 3]
+  const currentPeriod = data?.status.period || 0
+  const regularPeriodsData = regularPeriodNumbers.map(num => {
+    const existing = data?.periods.find(p => p.period === num && p.type === 'REG')
+    const isCurrent = data?.status.state === 'in' && currentPeriod === num
+    return {
+      period: existing || { period: num, type: 'REG' as const, goals: [] },
+      isCurrent
+    }
+  })
+
   const extraPeriods = data?.periods.filter(p => p.type === 'OT' || p.type === 'SO') ?? []
 
   const awaySog = data?.shots?.away ?? 0
@@ -362,20 +411,18 @@ export function GameCard({ gameId, t, onClose }: Props) {
         onClick={onClose}
         style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          // Сделал подложку более плотной, чтобы элементы страницы не просвечивали сквозь модалку
-          backgroundColor: 'rgba(0, 0, 0, 0.85)', zIndex: 1200,
-          backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+          backgroundColor: 'var(--overlay)', zIndex: 1200,
+          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
         }}
       />
       <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
         width: 'min(1600px, calc(100vw - 16px))', maxHeight: 'calc(100vh - 16px)',
         backgroundColor: '#0f1115',
-        // Возвращаем картинку льда. Градиент затемняет её, но не перекрывает полностью.
-        backgroundImage: 'linear-gradient(180deg, rgba(15,17,21,0.5) 0%, rgba(15,17,21,0.85) 50%, rgba(15,17,21,0.95) 100%), url("/bg/main-bg.jpg")',
-        backgroundSize: 'cover, cover', backgroundPosition: 'center, center', backgroundRepeat: 'no-repeat, no-repeat',
+        backgroundImage: 'linear-gradient(180deg, rgba(15,17,21,0.9) 0%, #0f1115 30%), url("/bg/main-bg.jpg")',
+        backgroundSize: 'cover, cover', backgroundPosition: 'center top, center top', backgroundRepeat: 'no-repeat, no-repeat',
         border: '1px solid var(--border)', borderRadius: 12, zIndex: 1201,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
         <div style={{
@@ -418,7 +465,7 @@ export function GameCard({ gameId, t, onClose }: Props) {
                   fontWeight: 600,
                   color: finished ? 'var(--text-secondary)' : data.status.state === 'in' ? 'var(--loss)' : 'var(--accent)',
                 }}>
-                  {data.status.description}
+                  {getStatusText()}
                 </span>
               </div>
 
@@ -474,16 +521,19 @@ export function GameCard({ gameId, t, onClose }: Props) {
               {data.periods.length > 0 && (
                 <div>
                   <div style={sectionTitle}>{t.goalScorers}</div>
-                  {regularPeriods.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${regularPeriods.length}, minmax(0, 1fr))`, gap: 10, marginBottom: extraPeriods.length > 0 ? 10 : 0 }}>
-                      {regularPeriods.map(p => renderPeriodCard(p, 'reg'))}
-                    </div>
-                  )}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                    gap: 10, 
+                    marginBottom: extraPeriods.length > 0 ? 10 : 0,
+                  }}>
+                    {regularPeriodsData.map(({ period, isCurrent }) => renderPeriodCard(period, 'reg', isCurrent))}
+                  </div>
                   {extraPeriods.length > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
                       {extraPeriods.map(p => (
                         <div key={`${p.type}-${p.period}`} style={{ flex: '0 1 600px', minWidth: 0 }}>
-                          {renderPeriodCard(p, 'extra')}
+                          {renderPeriodCard(p, 'extra', data.status.state === 'in' && data.status.period === p.period)}
                         </div>
                       ))}
                     </div>

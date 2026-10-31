@@ -45,8 +45,9 @@ const ALL_TEAMS = [
 const EAST_TEAMS = new Set(['BOS','BUF','DET','FLA','MTL','OTT','TBL','TOR','CAR','CBJ','NJD','NYI','NYR','PHI','PIT','WSH']);
 
 const COUNTRY_MAP: Record<string, string> = {
-  CAN: 'Canada', USA: 'USA', RUS: 'Russia', SWE: 'Sweden', FIN: 'Finland',
-  CZE: 'Czechia', SVK: 'Slovakia', GER: 'Germany', SUI: 'Switzerland',
+  CAN: 'Canada', USA: 'USA', RUS: 'Russia', URS: 'Russia', USSR: 'Russia', SOV: 'Russia',
+  SWE: 'Sweden', FIN: 'Finland', CZE: 'Czechia', CSK: 'Czechia', SVK: 'Slovakia',
+  GER: 'Germany', FRG: 'Germany', GDR: 'Germany', SUI: 'Switzerland',
   LAT: 'Latvia', BLR: 'Belarus', UKR: 'Ukraine', KAZ: 'Kazakhstan',
   DEN: 'Denmark', NOR: 'Norway', AUT: 'Austria', FRA: 'France',
 };
@@ -342,7 +343,7 @@ export async function fetchScheduleRaw(date?: string) {
 }
 
 export async function fetchCalendarRaw(month: string) {
-  const cleanMonth = month.replace('-', ''); // YYYYMM
+  const cleanMonth = month.replace('-', '');
   const url = `${ESPN_BASE}/scoreboard?dates=${cleanMonth}&limit=1000`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`ESPN calendar ${r.status}`);
@@ -375,6 +376,180 @@ export async function fetchCalendarRaw(month: string) {
     }
   }
   return games;
+}
+
+export async function fetchTeamDetails(abbrev: string, season: string) {
+  const espnCode = ESPN_TEAM_MAP[abbrev] ?? abbrev.toLowerCase();
+  
+  // 1) Roster
+  let roster = { forwards: [] as any[], defensemen: [] as any[], goalies: [] as any[] };
+  const rosterIds = new Set<string>();
+
+  try {
+    const r = await fetch(`${ESPN_BASE}/teams/${espnCode}/roster`);
+    if (r.ok) {
+      const data: any = await r.json();
+      const rawAthletes: any[] = [];
+      if (Array.isArray(data.athletes)) {
+        for (const group of data.athletes) {
+          if (Array.isArray(group.items)) {
+            rawAthletes.push(...group.items);
+          } else {
+            rawAthletes.push(group);
+          }
+        }
+      }
+      
+      for (const a of rawAthletes) {
+        const posRaw = a.position?.abbreviation || a.position?.name || '';
+        const pos = String(posRaw).toUpperCase();
+        
+        rosterIds.add(String(a.id));
+
+        const mappedPlayer = {
+          id: a.id,
+          sweaterNumber: a.jersey || a.sweaterNumber,
+          headshot: a.headshot?.href || a.headshot?.url,
+          firstName: { default: a.firstName },
+          lastName: { default: a.lastName },
+          positionCode: a.position?.abbreviation,
+          shootsCatches: a.hand?.abbreviation || '',
+          injury: a.injuries?.[0]?.status || null
+        };
+        
+        if (pos === 'G' || pos.includes('GOAL')) roster.goalies.push(mappedPlayer);
+        else if (pos === 'D' || pos.includes('DEFEN')) roster.defensemen.push(mappedPlayer);
+        else roster.forwards.push(mappedPlayer);
+      }
+    }
+  } catch (e) { console.error('Roster fetch failed', e); }
+
+  // 2) Schedule
+  let past: any[] = [];
+  let future: any[] = [];
+  try {
+    const r = await fetch(`${ESPN_BASE}/teams/${espnCode}/schedule`);
+    if (r.ok) {
+      const data: any = await r.json();
+      const events = data.events || [];
+      for (const e of events) {
+        const comp = e.competitions?.[0];
+        if (!comp) continue;
+        const home = comp.competitors.find((c: any) => c.homeAway === 'home');
+        const away = comp.competitors.find((c: any) => c.homeAway === 'away');
+        if (!home || !away) continue;
+        
+        const gameStateRaw = comp.status?.type?.state;
+        const gameState = gameStateRaw === 'post' ? 'FINAL' : (gameStateRaw === 'in' ? 'LIVE' : 'FUT');
+
+        const homeScoreVal = home.score?.value ?? home.score;
+        const awayScoreVal = away.score?.value ?? away.score;
+        const homeScore = homeScoreVal !== undefined ? Number(homeScoreVal) : 0;
+        const awayScore = awayScoreVal !== undefined ? Number(awayScoreVal) : 0;
+
+        const gameObj = {
+          id: Number(e.id),
+          gameDate: e.date.split('T')[0],
+          startTimeUTC: e.date,
+          gameState,
+          homeTeam: {
+             abbrev: fixAbbrev(home.team.abbreviation),
+             score: homeScore,
+             logo: getLogo(home.team.abbreviation)
+          },
+          awayTeam: {
+             abbrev: fixAbbrev(away.team.abbreviation),
+             score: awayScore,
+             logo: getLogo(away.team.abbreviation)
+          }
+        };
+        
+        if (gameState === 'FINAL' || gameState === 'LIVE') {
+           past.push(gameObj);
+        } else {
+           future.push(gameObj);
+        }
+      }
+    }
+  } catch (e) { console.error('Schedule fetch failed', e); }
+  
+  past.sort((a, b) => new Date(b.startTimeUTC).getTime() - new Date(a.startTimeUTC).getTime());
+  future.sort((a, b) => new Date(a.startTimeUTC).getTime() - new Date(b.startTimeUTC).getTime());
+
+  // 3) Leaders
+  const getTeamLeaders = async (kind: 'skaters' | 'goalies', statCategory: string, sortKey: string, limit: number = 3) => {
+    try {
+      const url = `${ESPN_WEB}/statistics/byathlete?region=us&lang=en&contentorigin=espn&isqualified=false&limit=1000&sort=${sortKey}:desc&category=${kind}`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      
+      const filtered = (data.athletes || []).filter((item: any) => rosterIds.has(String(item.athlete.id)));
+      
+      return filtered.slice(0, limit).map((item: any) => {
+        const targetCat = item.categories?.find((c: any) => c.name === statCategory);
+        return {
+          playerId: String(item.athlete.id),
+          name: item.athlete.displayName || item.athlete.shortName || '',
+          headshot: item.athlete.headshot?.href || '',
+          totals: targetCat?.totals || [],
+        };
+      });
+    } catch (e) { return []; }
+  };
+
+  const pointsList = await getTeamLeaders('skaters', 'offensive', 'offensive.points', 3);
+  const goalsList = await getTeamLeaders('skaters', 'offensive', 'offensive.goals', 3);
+  
+  // 4) Вратарь
+  let goalie: any = null;
+  const goalieCandidates = await getTeamLeaders('goalies', 'general', 'general.wins', 10);
+  
+  if (goalieCandidates.length > 0) {
+    const g = goalieCandidates[0];
+    let wins = 0, losses = 0, otLosses = 0, shutouts = 0;
+    
+    try {
+      const r = await fetch(`${ESPN_WEB}/athletes/${g.playerId}/stats`);
+      if (r.ok) {
+        const data: any = await r.json();
+        const categories = data.categories || [];
+        const regSeason = categories.find((c: any) => c.displayName?.includes('Regular Season'));
+        
+        if (regSeason?.statistics && regSeason.names) {
+          const names = regSeason.names as string[];
+          const statsList = [...regSeason.statistics];
+          statsList.sort((a: any, b: any) => (b.season?.year || 0) - (a.season?.year || 0));
+          const current = statsList[0];
+          
+          if (current) {
+            const statMap: Record<string, number> = {};
+            const statsArr = current.stats || [];
+            for (let i = 0; i < names.length; i++) {
+              statMap[names[i]] = Number(statsArr[i]) || 0;
+            }
+            wins = statMap.wins || 0;
+            losses = statMap.losses || 0;
+            otLosses = statMap.overtimeLosses || statMap.otLosses || 0;
+            shutouts = statMap.shutouts || 0;
+          }
+        }
+      }
+    } catch (e) { console.error('Goalie stats fetch failed', e); }
+    
+    goalie = { playerId: g.playerId, name: g.name, headshot: g.headshot, wins, losses, otLosses, shutouts };
+  }
+
+  return {
+    roster,
+    past: past.slice(0, 5),
+    future: future.slice(0, 5),
+    leaders: {
+      points: pointsList.map(p => ({ ...p, points: Number(p.totals[2]) || 0 })),
+      goals: goalsList.map(p => ({ ...p, goals: Number(p.totals[0]) || 0 })),
+      goalie
+    }
+  };
 }
 
 export async function fetchPlayoffBracket(year: string) {
@@ -639,14 +814,12 @@ export async function fetchClubStats(teamAbbrev: string, season: string) { retur
 
 export async function fetchPlayer(playerId: number | string) {
   try {
-    // 1) Статистика
     let statsData: any = {};
     try {
       const r = await fetch(`${ESPN_WEB}/athletes/${playerId}/stats`);
       if (r.ok) statsData = await r.json();
     } catch (e) { console.error('Stats fetch failed', e); }
 
-    // 2) Био
     let athlete: any = {};
     try {
       const r = await fetch(`${ESPN_WEB}/athletes/${playerId}`);
@@ -656,7 +829,33 @@ export async function fetchPlayer(playerId: number | string) {
       }
     } catch (e) { console.error('Bio fetch failed', e); }
 
-    // 3) Базовые поля
+    // Получаем статус травмы напрямую из состава команды
+    let injuryStatus: string | null = null;
+    try {
+      const teamAbbrev = athlete.team?.abbreviation || athlete.teamShortName;
+      if (teamAbbrev) {
+        const espnCode = ESPN_TEAM_MAP[teamAbbrev] ?? teamAbbrev.toLowerCase();
+        const r = await fetch(`${ESPN_BASE}/teams/${espnCode}/roster`);
+        if (r.ok) {
+          const data: any = await r.json();
+          const rawAthletes: any[] = [];
+          if (Array.isArray(data.athletes)) {
+            for (const group of data.athletes) {
+              if (Array.isArray(group.items)) {
+                rawAthletes.push(...group.items);
+              } else {
+                rawAthletes.push(group);
+              }
+            }
+          }
+          const found = rawAthletes.find((a: any) => String(a.id) === String(playerId));
+          if (found && found.injuries && found.injuries.length > 0) {
+            injuryStatus = found.injuries[0].status || 'Out';
+          }
+        }
+      }
+    } catch (e) { console.error('Injury fetch from roster failed', e); }
+
     let heightCm;
     if (athlete.displayHeight) {
       const match = athlete.displayHeight.match(/(\d+)'\s*(\d+)/);
@@ -708,7 +907,6 @@ export async function fetchPlayer(playerId: number | string) {
       }
     }
 
-    // 4) Обогащение через Core API
     if (!birthCountry || !draftDetails || !birthCity) {
       try {
         const core = await fetchCoreAthlete(playerId);
@@ -743,7 +941,6 @@ export async function fetchPlayer(playerId: number | string) {
       } catch (e) { console.error('Core athlete enrichment failed', e); }
     }
 
-    // 5) Парсинг статистики (объединяем все категории Regular Season)
     let careerTotals: any = null;
     let seasonTotals: any[] = [];
     let featuredStats: any = null;
@@ -791,10 +988,7 @@ export async function fetchPlayer(playerId: number | string) {
       }
 
       const sortedYears = Object.keys(allStats).map(Number).sort((a, b) => b - a);
-
-      for (const year of sortedYears) {
-        seasonTotals.push(allStats[year]);
-      }
+      for (const year of sortedYears) seasonTotals.push(allStats[year]);
 
       if (seasonTotals.length > 0) {
         featuredStats = { regularSeason: { subSeason: seasonTotals[0] } };
@@ -819,7 +1013,6 @@ export async function fetchPlayer(playerId: number | string) {
 
         career.goalsAgainstAvg = seasonTotals[0].goalsAgainstAvg;
         career.savePctg = seasonTotals[0].savePctg;
-
         careerTotals = { regularSeason: career };
       }
     }
@@ -838,6 +1031,7 @@ export async function fetchPlayer(playerId: number | string) {
       birthDate,
       birthCity: birthCity ? { default: String(birthCity) } : undefined,
       birthCountry: birthCountry ? String(birthCountry) : undefined,
+      injury: injuryStatus,
       draftDetails,
       featuredStats,
       careerTotals,
@@ -1005,7 +1199,23 @@ export async function fetchGameSummary(eventId: string | number): Promise<Normal
   const periodTypeRaw = competition.status?.period?.type ?? '';
   if (state === 'post' && (periodTypeRaw === 'OT' || periodTypeRaw === 'SO')) description = `Final ${periodTypeRaw}`;
 
-  const status = { state, description, period: competition.status?.period?.number, clock: competition.status?.displayClock };
+  // ИСПРАВЛЕНИЕ: ESPN отдает period как число, а не как объект
+  let periodNum: number | undefined = undefined;
+  const periodVal = competition.status?.period;
+  if (typeof periodVal === 'number') periodNum = periodVal;
+  else if (periodVal && typeof periodVal === 'object' && periodVal.number) periodNum = Number(periodVal.number);
+  
+  // Запасной вариант: парсим из detail (например, "1st Period")
+  const detailStr = String(statusType.detail || '');
+  if (!periodNum && detailStr) {
+    if (detailStr.includes('1st')) periodNum = 1;
+    else if (detailStr.includes('2nd')) periodNum = 2;
+    else if (detailStr.includes('3rd')) periodNum = 3;
+    else if (detailStr.includes('OT')) periodNum = 4;
+    else if (detailStr.includes('SO')) periodNum = 5;
+  }
+
+  const status = { state, description, period: periodNum, clock: competition.status?.displayClock };
 
   const boxTeams: any[] = raw.boxscore?.teams ?? [];
   for (const bt of boxTeams) {
@@ -1033,11 +1243,11 @@ export async function fetchGameSummary(eventId: string | number): Promise<Normal
   const awayTeamId = awayComp.team?.id;
 
   for (const play of scoringPlays) {
-    const periodNum = Number(play.period?.number ?? 1);
+    const periodNumPlay = Number(play.period?.number ?? 1);
     const pTypeRaw = play.period?.type;
     let periodType: 'REG' | 'OT' | 'SO' = 'REG';
     if (pTypeRaw === 'SO') periodType = 'SO';
-    else if (pTypeRaw === 'OT' || periodNum > 3) periodType = 'OT';
+    else if (pTypeRaw === 'OT' || periodNumPlay > 3) periodType = 'OT';
 
     const playTeamAbbr = fixAbbrev(play.team?.abbreviation ?? '');
     const playTeamId = play.team?.id;
@@ -1095,9 +1305,9 @@ export async function fetchGameSummary(eventId: string | number): Promise<Normal
       awayScore: awayRunning, homeScore: homeRunning,
     };
 
-    if (!periodMap.has(periodNum)) periodMap.set(periodNum, []);
-    periodMap.get(periodNum)!.push(goal);
-    if (!periodsSet.has(periodNum)) periodsSet.set(periodNum, { period: periodNum, type: periodType, goals: [] });
+    if (!periodMap.has(periodNumPlay)) periodMap.set(periodNumPlay, []);
+    periodMap.get(periodNumPlay)!.push(goal);
+    if (!periodsSet.has(periodNumPlay)) periodsSet.set(periodNumPlay, { period: periodNumPlay, type: periodType, goals: [] });
   }
 
   const periods: NormalizedPeriod[] = Array.from(periodsSet.values());
