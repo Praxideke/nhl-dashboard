@@ -16,6 +16,7 @@
     "dist-server/**/*"
   ],
   "win": {
+    "icon": "./icon.ico",
     "target": [
       {
         "target": "nsis",
@@ -34,7 +35,10 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "NHL Stats",
-    "artifactName": "NHL-Stats-Setup-${version}.exe"
+    "artifactName": "NHL-Stats-Setup-${version}.exe",
+    "installerIcon": "./icon.ico",
+    "uninstallerIcon": "./icon.ico",
+    "installerHeaderIcon": "./icon.ico"
   },
   "portable": {
     "artifactName": "NHL-Stats-Portable.exe"
