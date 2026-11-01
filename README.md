@@ -4,7 +4,7 @@
 
 ## 📥 Скачать
 
-Готовая сборка для Windows (установщик) находится в разделе [Releases](https://github.com/Praxideke/nhl-dashboard/releases/latest).
+Готовые сборки для Windows (установщик и портативная версия) находятся в разделе [Releases](https://github.com/Praxideke/nhl-dashboard/releases/latest).
 
 Node.js не требуется, всё упаковано внутри `.exe`. Для загрузки данных (через ESPN API) нужен интернет.
 
