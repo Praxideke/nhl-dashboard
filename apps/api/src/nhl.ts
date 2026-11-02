@@ -52,6 +52,8 @@ const COUNTRY_MAP: Record<string, string> = {
   DEN: 'Denmark', NOR: 'Norway', AUT: 'Austria', FRA: 'France',
 };
 
+const seasonGamesCache = new Map<string, any[]>();
+
 function fixAbbrev(abbrev: string) {
   const map: Record<string, string> = { TB: 'TBL', SJ: 'SJS', LA: 'LAK', NJ: 'NJD' };
   return map[abbrev] || abbrev;
@@ -144,31 +146,213 @@ async function resolveCoreRef(refUrl: string): Promise<any> {
   } catch { return null; }
 }
 
-export async function fetchStandingsRaw(date?: string) {
-  const r = await fetch(`${ESPN_V2}/standings`);
+async function fetchSeasonGames(season: string): Promise<any[]> {
+  if (seasonGamesCache.has(season)) return seasonGamesCache.get(season)!;
+
+  const startYear = Number(season.substring(0, 4));
+  const endYear = Number(season.substring(4, 8));
+
+  const months: string[] = [];
+  for (const m of ['10', '11', '12']) months.push(`${startYear}${m}`);
+  for (const m of ['01', '02', '03', '04', '05', '06']) months.push(`${endYear}${m}`);
+
+  const allEvents: any[] = [];
+  for (const m of months) {
+    try {
+      const url = `${ESPN_BASE}/scoreboard?dates=${m}&seasontype=2&limit=1000`;
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const data: any = await r.json();
+      if (Array.isArray(data.events)) allEvents.push(...data.events);
+    } catch {}
+  }
+
+  const seen = new Set<string>();
+  const unique = allEvents.filter((e: any) => {
+    const id = String(e.id ?? '');
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  seasonGamesCache.set(season, unique);
+  return unique;
+}
+
+export async function fetchStandingsForDate(season: string, asOfDate: string) {
+  const events = await fetchSeasonGames(season);
+
+  type RowStats = {
+    w: number; l: number; otl: number; pts: number; gp: number;
+    gf: number; ga: number;
+    homeW: number; homeL: number; homeO: number;
+    roadW: number; roadL: number; roadO: number;
+    streak: string;
+    last5: string[];
+  };
+
+  const stats: Record<string, RowStats> = {};
+  for (const t of ALL_TEAMS) {
+    stats[t.abbrev] = {
+      w: 0, l: 0, otl: 0, pts: 0, gp: 0, gf: 0, ga: 0,
+      homeW: 0, homeL: 0, homeO: 0,
+      roadW: 0, roadL: 0, roadO: 0,
+      streak: '-',
+      last5: [],
+    };
+  }
+
+  type GameResult = { date: string; result: 'W' | 'L' | 'OTL' };
+  const resultsByTeam: Record<string, GameResult[]> = {};
+  for (const t of ALL_TEAMS) resultsByTeam[t.abbrev] = [];
+
+  const sortedEvents = [...events].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  for (const event of sortedEvents) {
+    const comp = event.competitions?.[0];
+    if (!comp) continue;
+    if (comp.status?.type?.state !== 'post') continue;
+
+    const gameDate = event.date.split('T')[0];
+    if (gameDate >= asOfDate) continue;
+
+    const home = comp.competitors?.find((c: any) => c.homeAway === 'home');
+    const away = comp.competitors?.find((c: any) => c.homeAway === 'away');
+    if (!home || !away) continue;
+
+    const homeAbbr = fixAbbrev(home.team?.abbreviation || '');
+    const awayAbbr = fixAbbrev(away.team?.abbreviation || '');
+    if (!stats[homeAbbr] || !stats[awayAbbr]) continue;
+
+    const homeScore = Number(home.score?.value ?? home.score ?? 0);
+    const awayScore = Number(away.score?.value ?? away.score ?? 0);
+
+    const pType = String(comp.status?.period?.type || '').toUpperCase();
+    const desc = String(comp.status?.type?.description || '');
+    const isOvertime = pType === 'OT' || pType === 'SO' || desc.includes('OT') || desc.includes('SO');
+
+    stats[homeAbbr].gp++;
+    stats[awayAbbr].gp++;
+    stats[homeAbbr].gf += homeScore;
+    stats[homeAbbr].ga += awayScore;
+    stats[awayAbbr].gf += awayScore;
+    stats[awayAbbr].ga += homeScore;
+
+    if (homeScore > awayScore) {
+      stats[homeAbbr].w++;
+      stats[homeAbbr].homeW++;
+      stats[homeAbbr].pts += 2;
+      if (isOvertime) {
+        stats[awayAbbr].otl++;
+        stats[awayAbbr].roadO++;
+        stats[awayAbbr].pts += 1;
+      } else {
+        stats[awayAbbr].l++;
+        stats[awayAbbr].roadL++;
+      }
+      resultsByTeam[homeAbbr].push({ date: gameDate, result: 'W' });
+      resultsByTeam[awayAbbr].push({ date: gameDate, result: isOvertime ? 'OTL' : 'L' });
+    } else {
+      stats[awayAbbr].w++;
+      stats[awayAbbr].roadW++;
+      stats[awayAbbr].pts += 2;
+      if (isOvertime) {
+        stats[homeAbbr].otl++;
+        stats[homeAbbr].homeO++;
+        stats[homeAbbr].pts += 1;
+      } else {
+        stats[homeAbbr].l++;
+        stats[homeAbbr].homeL++;
+      }
+      resultsByTeam[awayAbbr].push({ date: gameDate, result: 'W' });
+      resultsByTeam[homeAbbr].push({ date: gameDate, result: isOvertime ? 'OTL' : 'L' });
+    }
+  }
+
+  for (const t of ALL_TEAMS) {
+    const teamResults = resultsByTeam[t.abbrev];
+    teamResults.sort((a, b) => a.date.localeCompare(b.date));
+    const last5 = teamResults.slice(-5).reverse().map(r => r.result);
+    stats[t.abbrev].last5 = last5;
+
+    let streak = '-';
+    if (teamResults.length > 0) {
+      const lastResult = teamResults[teamResults.length - 1].result;
+      let count = 0;
+      for (let i = teamResults.length - 1; i >= 0; i--) {
+        if (teamResults[i].result === lastResult) count++;
+        else break;
+      }
+      if (lastResult === 'W') streak = `W${count}`;
+      else if (lastResult === 'OTL') streak = `OTL${count}`;
+      else streak = `L${count}`;
+    }
+    stats[t.abbrev].streak = streak;
+  }
+
+  const rows = ALL_TEAMS.map(t => {
+    const s = stats[t.abbrev];
+    return {
+      team: { abbrev: t.abbrev, name: t.name, logo: getLogo(t.abbrev) },
+      conference: t.conf,
+      division: t.div,
+      rank: 0,
+      gamesPlayed: s.gp,
+      wins: s.w,
+      losses: s.l,
+      otLosses: s.otl,
+      points: s.pts,
+      pointPctg: s.gp > 0 ? s.pts / (s.gp * 2) : 0,
+      regulationWins: s.w,
+      regulationPlusOtWins: s.w,
+      goalDiff: s.gf - s.ga,
+      goalFor: s.gf,
+      goalAgainst: s.ga,
+      homeRecord: s.gp > 0 ? `${s.homeW}-${s.homeL}-${s.homeO}` : '-',
+      roadRecord: s.gp > 0 ? `${s.roadW}-${s.roadL}-${s.roadO}` : '-',
+      streak: s.streak,
+      last5: s.last5,
+      last5Games: [],
+      clinchIndicator: '',
+    };
+  });
+
+  rows.sort((a, b) => b.points - a.points || b.pointPctg - a.pointPctg || b.goalDiff - a.goalDiff);
+  rows.forEach((r, i) => { r.rank = i + 1; });
+
+  return rows;
+}
+
+export async function fetchStandingsRaw(season?: string) {
+  let url = `${ESPN_V2}/standings`;
+  if (season && season.length === 8) {
+    url += `?season=${season.substring(4)}`;
+  }
+
+  const r = await fetch(url);
   if (!r.ok) throw new Error(`ESPN standings ${r.status}`);
   const data: any = await r.json();
-  
+
   const espnStats: Record<string, any> = {};
-  
+
   if (data.children) {
     for (const conf of data.children) {
       if (conf.standings && conf.standings.entries) {
         for (const entry of conf.standings.entries) {
           const team = entry.team;
           const stats: any[] = entry.stats || [];
-          
+
           const getStat = (name: string) => {
-            const s = stats.find((x: any) => 
-              (x.name && x.name.toLowerCase() === name.toLowerCase()) || 
+            const s = stats.find((x: any) =>
+              (x.name && x.name.toLowerCase() === name.toLowerCase()) ||
               (x.abbreviation && x.abbreviation.toLowerCase() === name.toLowerCase())
             );
             return s ? Number(s.value) : 0;
           };
-          
+
           const getStrStat = (name: string) => {
-            const s = stats.find((x: any) => 
-              (x.name && x.name.toLowerCase() === name.toLowerCase()) || 
+            const s = stats.find((x: any) =>
+              (x.name && x.name.toLowerCase() === name.toLowerCase()) ||
               (x.abbreviation && x.abbreviation.toLowerCase() === name.toLowerCase())
             );
             return s ? s.displayValue : '';
@@ -238,44 +422,54 @@ export async function fetchStandingsRaw(date?: string) {
   return rows;
 }
 
-export async function fetchTeamLast5(abbrev: string): Promise<{ last5: string[], last5Games: any[] }> {
+export async function fetchTeamLast5(abbrev: string, season?: string, asOfDate?: string): Promise<{ last5: string[], last5Games: any[] }> {
   const espnCode = ESPN_TEAM_MAP[abbrev] ?? abbrev.toLowerCase();
+  let url = `${ESPN_BASE}/teams/${espnCode}/schedule`;
+  if (season && season.length === 8) {
+    url += `?season=${season.substring(4)}`;
+  }
+
   try {
-    const r = await fetch(`${ESPN_BASE}/teams/${espnCode}/schedule`);
+    const r = await fetch(url);
     if (!r.ok) throw new Error(`ESPN schedule ${abbrev} ${r.status}`);
     const data: any = await r.json();
     const events = data.events || [];
+
+    const completed = events.filter((e: any) => {
+      const isPost = e.competitions?.[0]?.status?.type?.state === 'post';
+      const gameDate = e.date.split('T')[0];
+      return isPost && (!asOfDate || gameDate < asOfDate);
+    });
     
-    const completed = events.filter((e: any) => e.competitions?.[0]?.status?.type?.state === 'post');
     completed.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    
-    const last5 = completed.slice(0, 5).reverse(); 
+
+    const last5 = completed.slice(0, 5).reverse();
     const last5Str: string[] = [];
     const last5Games: any[] = [];
-    
+
     for (const game of last5) {
       const comp = game.competitions[0];
       const home = comp.competitors.find((c: any) => c.homeAway === 'home');
       const away = comp.competitors.find((c: any) => c.homeAway === 'away');
       if (!home || !away) continue;
-      
+
       const isHome = fixAbbrev(home.team.abbreviation) === fixAbbrev(abbrev);
       const ourTeam = isHome ? home : away;
       const oppTeam = isHome ? away : home;
-      
+
       const ourScore = Number(ourTeam.score?.value ?? ourTeam.score ?? 0);
       const oppScore = Number(oppTeam.score?.value ?? oppTeam.score ?? 0);
-      
+
       const isWin = ourScore > oppScore;
       const desc = comp.status?.type?.description || '';
       const isOvertime = desc.includes('OT') || desc.includes('SO');
-      
+
       let result = 'L';
       if (isWin) result = 'W';
       else if (isOvertime) result = 'OTL';
-      
+
       last5Str.push(result);
-      
+
       last5Games.push({
         gameDate: game.date.split('T')[0],
         startTimeUTC: game.date,
@@ -289,7 +483,7 @@ export async function fetchTeamLast5(abbrev: string): Promise<{ last5: string[],
         }
       });
     }
-    
+
     return { last5: last5Str, last5Games };
   } catch (e) {
     return { last5: [], last5Games: [] };
@@ -302,13 +496,13 @@ export async function fetchScheduleRaw(date?: string) {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`ESPN scoreboard ${r.status}`);
   const data: any = await r.json();
-  
+
   const games: any[] = [];
   if (data.events) {
     for (const event of data.events) {
       const comp = event.competitions?.[0];
       if (!comp) continue;
-      
+
       const home = comp.competitors.find((c: any) => c.homeAway === 'home');
       const away = comp.competitors.find((c: any) => c.homeAway === 'away');
       if (!home || !away) continue;
@@ -324,17 +518,17 @@ export async function fetchScheduleRaw(date?: string) {
         status: status,
         period: event.status.displayClock || '',
         gameType: 2,
-        homeTeam: { 
-          abbrev: fixAbbrev(home.team.abbreviation), 
+        homeTeam: {
+          abbrev: fixAbbrev(home.team.abbreviation),
           name: home.team.displayName,
           logo: getLogo(home.team.abbreviation),
-          score: home.score ? Number(home.score) : 0 
+          score: home.score ? Number(home.score) : 0
         },
-        awayTeam: { 
-          abbrev: fixAbbrev(away.team.abbreviation), 
+        awayTeam: {
+          abbrev: fixAbbrev(away.team.abbreviation),
           name: away.team.displayName,
           logo: getLogo(away.team.abbreviation),
-          score: away.score ? Number(away.score) : 0 
+          score: away.score ? Number(away.score) : 0
         },
       });
     }
@@ -348,13 +542,13 @@ export async function fetchCalendarRaw(month: string) {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`ESPN calendar ${r.status}`);
   const data: any = await r.json();
-  
+
   const games: any[] = [];
   if (data.events) {
     for (const event of data.events) {
       const comp = event.competitions?.[0];
       if (!comp) continue;
-      
+
       const home = comp.competitors.find((c: any) => c.homeAway === 'home');
       const away = comp.competitors.find((c: any) => c.homeAway === 'away');
       if (!home || !away) continue;
@@ -380,7 +574,7 @@ export async function fetchCalendarRaw(month: string) {
 
 export async function fetchTeamDetails(abbrev: string, season: string) {
   const espnCode = ESPN_TEAM_MAP[abbrev] ?? abbrev.toLowerCase();
-  
+
   // 1) Roster
   let roster = { forwards: [] as any[], defensemen: [] as any[], goalies: [] as any[] };
   const rosterIds = new Set<string>();
@@ -399,11 +593,11 @@ export async function fetchTeamDetails(abbrev: string, season: string) {
           }
         }
       }
-      
+
       for (const a of rawAthletes) {
         const posRaw = a.position?.abbreviation || a.position?.name || '';
         const pos = String(posRaw).toUpperCase();
-        
+
         rosterIds.add(String(a.id));
 
         const mappedPlayer = {
@@ -416,7 +610,7 @@ export async function fetchTeamDetails(abbrev: string, season: string) {
           shootsCatches: a.hand?.abbreviation || '',
           injury: a.injuries?.[0]?.status || null
         };
-        
+
         if (pos === 'G' || pos.includes('GOAL')) roster.goalies.push(mappedPlayer);
         else if (pos === 'D' || pos.includes('DEFEN')) roster.defensemen.push(mappedPlayer);
         else roster.forwards.push(mappedPlayer);
@@ -428,7 +622,11 @@ export async function fetchTeamDetails(abbrev: string, season: string) {
   let past: any[] = [];
   let future: any[] = [];
   try {
-    const r = await fetch(`${ESPN_BASE}/teams/${espnCode}/schedule`);
+    let scheduleUrl = `${ESPN_BASE}/teams/${espnCode}/schedule`;
+    if (season && season.length === 8) {
+      scheduleUrl += `?season=${season.substring(4)}`;
+    }
+    const r = await fetch(scheduleUrl);
     if (r.ok) {
       const data: any = await r.json();
       const events = data.events || [];
@@ -438,7 +636,7 @@ export async function fetchTeamDetails(abbrev: string, season: string) {
         const home = comp.competitors.find((c: any) => c.homeAway === 'home');
         const away = comp.competitors.find((c: any) => c.homeAway === 'away');
         if (!home || !away) continue;
-        
+
         const gameStateRaw = comp.status?.type?.state;
         const gameState = gameStateRaw === 'post' ? 'FINAL' : (gameStateRaw === 'in' ? 'LIVE' : 'FUT');
 
@@ -453,39 +651,39 @@ export async function fetchTeamDetails(abbrev: string, season: string) {
           startTimeUTC: e.date,
           gameState,
           homeTeam: {
-             abbrev: fixAbbrev(home.team.abbreviation),
-             score: homeScore,
-             logo: getLogo(home.team.abbreviation)
+            abbrev: fixAbbrev(home.team.abbreviation),
+            score: homeScore,
+            logo: getLogo(home.team.abbreviation)
           },
           awayTeam: {
-             abbrev: fixAbbrev(away.team.abbreviation),
-             score: awayScore,
-             logo: getLogo(away.team.abbreviation)
+            abbrev: fixAbbrev(away.team.abbreviation),
+            score: awayScore,
+            logo: getLogo(away.team.abbreviation)
           }
         };
-        
+
         if (gameState === 'FINAL' || gameState === 'LIVE') {
-           past.push(gameObj);
+          past.push(gameObj);
         } else {
-           future.push(gameObj);
+          future.push(gameObj);
         }
       }
     }
   } catch (e) { console.error('Schedule fetch failed', e); }
-  
+
   past.sort((a, b) => new Date(b.startTimeUTC).getTime() - new Date(a.startTimeUTC).getTime());
   future.sort((a, b) => new Date(a.startTimeUTC).getTime() - new Date(b.startTimeUTC).getTime());
 
   // 3) Leaders
   const getTeamLeaders = async (kind: 'skaters' | 'goalies', statCategory: string, sortKey: string, limit: number = 3) => {
     try {
-      const url = `${ESPN_WEB}/statistics/byathlete?region=us&lang=en&contentorigin=espn&isqualified=false&limit=1000&sort=${sortKey}:desc&category=${kind}`;
+      const url = `${ESPN_WEB}/statistics/byathlete?region=us&lang=en&contentorigin=espn&isqualified=false&limit=1000&sort=${sortKey}:desc&category=${kind}&seasontype=2`;
       const res = await fetch(url);
       if (!res.ok) return [];
       const data: any = await res.json();
-      
+
       const filtered = (data.athletes || []).filter((item: any) => rosterIds.has(String(item.athlete.id)));
-      
+
       return filtered.slice(0, limit).map((item: any) => {
         const targetCat = item.categories?.find((c: any) => c.name === statCategory);
         return {
@@ -500,28 +698,28 @@ export async function fetchTeamDetails(abbrev: string, season: string) {
 
   const pointsList = await getTeamLeaders('skaters', 'offensive', 'offensive.points', 3);
   const goalsList = await getTeamLeaders('skaters', 'offensive', 'offensive.goals', 3);
-  
+
   // 4) Вратарь
   let goalie: any = null;
   const goalieCandidates = await getTeamLeaders('goalies', 'general', 'general.wins', 10);
-  
+
   if (goalieCandidates.length > 0) {
     const g = goalieCandidates[0];
     let wins = 0, losses = 0, otLosses = 0, shutouts = 0;
-    
+
     try {
       const r = await fetch(`${ESPN_WEB}/athletes/${g.playerId}/stats`);
       if (r.ok) {
         const data: any = await r.json();
         const categories = data.categories || [];
         const regSeason = categories.find((c: any) => c.displayName?.includes('Regular Season'));
-        
+
         if (regSeason?.statistics && regSeason.names) {
           const names = regSeason.names as string[];
           const statsList = [...regSeason.statistics];
           statsList.sort((a: any, b: any) => (b.season?.year || 0) - (a.season?.year || 0));
           const current = statsList[0];
-          
+
           if (current) {
             const statMap: Record<string, number> = {};
             const statsArr = current.stats || [];
@@ -536,7 +734,7 @@ export async function fetchTeamDetails(abbrev: string, season: string) {
         }
       }
     } catch (e) { console.error('Goalie stats fetch failed', e); }
-    
+
     goalie = { playerId: g.playerId, name: g.name, headshot: g.headshot, wins, losses, otLosses, shutouts };
   }
 
@@ -777,7 +975,7 @@ export async function fetchPlayerSearch(query: string) {
     const r = await fetch(url);
     if (!r.ok) return [];
     const data: any = await r.json();
-    
+
     const playerGroup = data.results?.find((res: any) => res.type === 'player');
     if (!playerGroup || !Array.isArray(playerGroup.contents)) return [];
 
@@ -795,7 +993,7 @@ export async function fetchPlayerSearch(query: string) {
 
       const teamName = c.subtitle || '';
       const team = ALL_TEAMS.find(t => t.name === teamName || t.name.includes(teamName) || teamName.includes(t.name));
-      
+
       return {
         playerId,
         name: c.displayName,
@@ -829,7 +1027,6 @@ export async function fetchPlayer(playerId: number | string) {
       }
     } catch (e) { console.error('Bio fetch failed', e); }
 
-    // Получаем статус травмы напрямую из состава команды
     let injuryStatus: string | null = null;
     try {
       const teamAbbrev = athlete.team?.abbreviation || athlete.teamShortName;
@@ -1074,12 +1271,18 @@ interface RawLeader {
 async function fetchLeadersRaw(
   kind: 'skaters' | 'goalies',
   field: LeaderField,
+  season: string,
   limit: number = 5,
   order: 'asc' | 'desc' = 'desc'
 ): Promise<RawLeader[]> {
   const sort = encodeURIComponent(`${field.sortKey}:${order}`);
   const fetchLimit = limit * 3;
-  const url = `${ESPN_WEB}/statistics/byathlete?region=us&lang=en&contentorigin=espn&isqualified=false&limit=${fetchLimit}&sort=${sort}&category=${kind}`;
+  const year = season && season.length === 8 ? season.substring(4, 8) : '';
+  const seasonParam = year ? `&season=${year}` : '';
+  
+  // ИСПРАВЛЕНИЕ: Добавляем &seasontype=2 для регулярного чемпионата
+  const url = `${ESPN_WEB}/statistics/byathlete?region=us&lang=en&contentorigin=espn&isqualified=false&limit=${fetchLimit}&sort=${sort}&category=${kind}${seasonParam}&seasontype=2`;
+  
   const r = await fetch(url);
   if (!r.ok) throw new Error(`ESPN leaders ${kind} ${r.status}`);
   const data: any = await r.json();
@@ -1131,19 +1334,19 @@ async function fetchLeadersRaw(
 
 export async function fetchSkaterLeaders(season: string) {
   const [points, goals, assists] = await Promise.all([
-    fetchLeadersRaw('skaters', SKATER_FIELDS.points, 5, 'desc'),
-    fetchLeadersRaw('skaters', SKATER_FIELDS.goals, 5, 'desc'),
-    fetchLeadersRaw('skaters', SKATER_FIELDS.assists, 5, 'desc'),
+    fetchLeadersRaw('skaters', SKATER_FIELDS.points, season, 5, 'desc'),
+    fetchLeadersRaw('skaters', SKATER_FIELDS.goals, season, 5, 'desc'),
+    fetchLeadersRaw('skaters', SKATER_FIELDS.assists, season, 5, 'desc'),
   ]);
   return { points, goals, assists };
 }
 
 export async function fetchGoalieLeaders(season: string) {
   const [wins, savePctg, goalsAgainstAvg, shutouts] = await Promise.all([
-    fetchLeadersRaw('goalies', GOALIE_FIELDS.wins, 5, 'desc'),
-    fetchLeadersRaw('goalies', GOALIE_FIELDS.savePctg, 5, 'desc'),
-    fetchLeadersRaw('goalies', GOALIE_FIELDS.goalsAgainstAvg, 5, 'asc'),
-    fetchLeadersRaw('goalies', GOALIE_FIELDS.shutouts, 5, 'desc'),
+    fetchLeadersRaw('goalies', GOALIE_FIELDS.wins, season, 5, 'desc'),
+    fetchLeadersRaw('goalies', GOALIE_FIELDS.savePctg, season, 5, 'desc'),
+    fetchLeadersRaw('goalies', GOALIE_FIELDS.goalsAgainstAvg, season, 5, 'asc'),
+    fetchLeadersRaw('goalies', GOALIE_FIELDS.shutouts, season, 5, 'desc'),
   ]);
   return { wins, savePctg, goalsAgainstAvg, shutouts };
 }
@@ -1199,13 +1402,11 @@ export async function fetchGameSummary(eventId: string | number): Promise<Normal
   const periodTypeRaw = competition.status?.period?.type ?? '';
   if (state === 'post' && (periodTypeRaw === 'OT' || periodTypeRaw === 'SO')) description = `Final ${periodTypeRaw}`;
 
-  // ИСПРАВЛЕНИЕ: ESPN отдает period как число, а не как объект
   let periodNum: number | undefined = undefined;
   const periodVal = competition.status?.period;
   if (typeof periodVal === 'number') periodNum = periodVal;
   else if (periodVal && typeof periodVal === 'object' && periodVal.number) periodNum = Number(periodVal.number);
-  
-  // Запасной вариант: парсим из detail (например, "1st Period")
+
   const detailStr = String(statusType.detail || '');
   if (!periodNum && detailStr) {
     if (detailStr.includes('1st')) periodNum = 1;

@@ -97,7 +97,11 @@ export default function App() {
   const [games, setGames] = useState<GameRow[]>([])
   const [playoffs, setPlayoffs] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  
+  // Глобальный стейт загрузки для превью
+  const [isAppLoading, setIsAppLoading] = useState(true)
   const [loading, setLoading] = useState(false)
+  
   const [selectedDate, setSelectedDate] = useState<string | null>(() => {
     return SEASON_END_DATES[initial.season] ?? null
   })
@@ -122,6 +126,7 @@ export default function App() {
       try {
         if (view === 'leaders' || view === 'injuries' || view === 'calendar' || view === 'news') {
           setError(null)
+          if (!cancelled) setIsAppLoading(false)
           return
         }
         
@@ -145,7 +150,10 @@ export default function App() {
       } catch (e) {
         if (!cancelled) setError((e as Error).message)
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+          setIsAppLoading(false)
+        }
       }
     }
     load()
@@ -207,6 +215,49 @@ export default function App() {
     ? new Date(selectedDate + 'T12:00:00Z').toLocaleDateString(t.locale, { day: 'numeric', month: 'long' })
     : t.todayBtn
 
+  // --- ЭКРАН ЗАГРУЗКИ (ПРЕВЬЮ) ---
+  if (isAppLoading) {
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: '#0f1115',
+        backgroundImage: 'radial-gradient(circle at center, #1a202c 0%, #0f1115 100%)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999
+      }}>
+        <style>
+          {`
+            @keyframes puckPulse {
+              0% { transform: scale(0.95); filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.4)); }
+              50% { transform: scale(1.05); filter: drop-shadow(0 0 40px rgba(255, 215, 0, 0.8)); }
+              100% { transform: scale(0.95); filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.4)); }
+            }
+            .puck-loading {
+              animation: puckPulse 2.5s infinite ease-in-out;
+            }
+          `}
+        </style>
+        <img 
+          src="/puck.png" 
+          alt="Loading..." 
+          className="puck-loading" 
+          style={{ width: 220, height: 220, objectFit: 'contain' }} 
+        />
+        <div style={{ 
+          marginTop: 40, 
+          fontSize: 22, 
+          color: '#FFD700', 
+          fontWeight: 'bold', 
+          letterSpacing: '2px', 
+          textTransform: 'uppercase',
+          textShadow: '0 2px 10px rgba(255, 215, 0, 0.3)'
+        }}>
+          {lang === 'ru' ? 'Загрузка NHL Stats...' : 'Loading NHL Stats...'}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{
       padding: '10px 16px',
@@ -218,9 +269,23 @@ export default function App() {
       flexDirection: 'column'
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
-        <h1 style={{ margin: 0, fontSize: 24, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{t.dashboard}</h1>
         
-        {/* Панель управления: кнопки сверху, версия снизу */}
+        {/* Шапка с логотипом-щитом */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <img 
+            src="/shield.png" 
+            alt="NHL Logo" 
+            style={{ 
+              width: 60, 
+              height: 60, 
+              objectFit: 'contain'
+            }} 
+          />
+          <h1 style={{ margin: 0, fontSize: 24, textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>
+            {t.dashboard}
+          </h1>
+        </div>
+        
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <button onClick={() => setLang('ru')} style={smallBtnStyle(lang === 'ru')}>RU</button>

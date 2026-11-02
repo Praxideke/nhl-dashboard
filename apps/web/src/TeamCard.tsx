@@ -262,6 +262,14 @@ function GameRow({
   )
 }
 
+function getCurrentSeason(): string {
+  const d = new Date()
+  const y = d.getUTCFullYear()
+  const m = d.getUTCMonth() + 1
+  if (m >= 9) return `${y}${y + 1}`
+  return `${y - 1}${y}`
+}
+
 export function TeamCard({ abbrev, season, t, onClose }: Props) {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
@@ -302,6 +310,7 @@ export function TeamCard({ abbrev, season, t, onClose }: Props) {
 
   const leaders = data?.leaders
   const fullName = TEAM_NAME_MAP[abbrev] ?? abbrev
+  const isCurrentSeason = season === getCurrentSeason()
 
   const panelStyle: React.CSSProperties = {
     backgroundColor: 'rgba(15, 20, 30, 0.3)',
@@ -386,7 +395,8 @@ export function TeamCard({ abbrev, season, t, onClose }: Props) {
 
           {data && (
             <>
-              {leaders && (
+              {/* Показываем лидеров только для текущего сезона */}
+              {isCurrentSeason && leaders && (
                 <section style={{ marginBottom: 18 }}>
                   <SectionTitle>{t.teamLeaders}</SectionTitle>
                   <div style={{
@@ -439,7 +449,8 @@ export function TeamCard({ abbrev, season, t, onClose }: Props) {
                 gridTemplateColumns: '2fr 1fr',
                 gap: 16,
               }}>
-                {data.roster && (
+                {/* Состав или заглушка */}
+                {isCurrentSeason && data.roster ? (
                   <section style={panelStyle}>
                     <SectionTitle>{t.teamRoster}</SectionTitle>
                     <div style={{
@@ -467,6 +478,21 @@ export function TeamCard({ abbrev, season, t, onClose }: Props) {
                       </div>
                     </div>
                   </section>
+                ) : (
+                  !isCurrentSeason && (
+                    <section style={panelStyle}>
+                      <SectionTitle>{t.teamRoster}</SectionTitle>
+                      <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.5 }}>🏒</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                          {t.locale === 'ru-RU' ? 'Состав доступен только для текущего сезона' : 'Roster is only available for the current season'}
+                        </div>
+                        <div style={{ fontSize: 12, marginTop: 8 }}>
+                          {t.locale === 'ru-RU' ? 'ESPN не хранит исторические составы в открытом доступе.' : 'ESPN does not provide historical rosters publicly.'}
+                        </div>
+                      </div>
+                    </section>
+                  )
                 )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

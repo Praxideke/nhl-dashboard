@@ -318,6 +318,14 @@ function SectionHeader({ title }: { title: string }) {
   )
 }
 
+function getCurrentSeason(): string {
+  const d = new Date()
+  const y = d.getUTCFullYear()
+  const m = d.getUTCMonth() + 1
+  if (m >= 9) return `${y}${y + 1}`
+  return `${y - 1}${y}`
+}
+
 export function LeagueLeaders({ season, t, onPlayerClick }: Props) {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
@@ -342,6 +350,7 @@ export function LeagueLeaders({ season, t, onPlayerClick }: Props) {
   const skaters = data?.skaters ?? {}
   const goalies = data?.goalies ?? {}
   const isRu = t.locale === 'ru-RU'
+  const isCurrentSeason = season === getCurrentSeason()
 
   const skaterCards = [
     { 
@@ -383,15 +392,37 @@ export function LeagueLeaders({ season, t, onPlayerClick }: Props) {
     gap: 12,
   }
   
-  // Увеличили минимальную ширину до 600px, чтобы принудительно сделать 2 колонки на широких экранах
   const goalieGrid: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 600px), 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
     gap: 12,
   }
 
   return (
     <div>
+      {/* Информационный баннер для исторических сезонов */}
+      {!isCurrentSeason && (
+        <div style={{
+          marginBottom: 16,
+          padding: '10px 16px',
+          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+          border: '1px solid var(--border-light)',
+          borderRadius: 6,
+          fontSize: 13,
+          color: 'var(--text-muted)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
+          <span style={{ fontSize: 16 }}>ℹ️</span>
+          <span>
+            {isRu
+              ? 'Показаны итоги регулярного чемпионата за весь сезон (на конец сезона)'
+              : 'Showing regular season totals for the entire season (end of season)'}
+          </span>
+        </div>
+      )}
+
       {skaterCards.length > 0 && (
         <div>
           <SectionHeader title={t.skaters} />

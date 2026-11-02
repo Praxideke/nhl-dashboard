@@ -8,7 +8,7 @@ import {
   fetchStandingsRaw, fetchScheduleRaw, fetchTeamSchedule, fetchStandingsSeasons,
   fetchPlayoffBracket, fetchTeamRoster, fetchEspnRoster, fetchPlayer, fetchGameSummary,
   fetchClubStats, fetchSkaterLeaders, fetchGoalieLeaders, fetchEspnInjuries, fetchPlayerSearch,
-  fetchEspnNews, fetchTeamLast5, fetchCalendarRaw, fetchTeamDetails,
+  fetchEspnNews, fetchTeamLast5, fetchCalendarRaw, fetchTeamDetails, fetchStandingsForDate,
 } from './nhl';
 import { cached } from './cache';
 
@@ -19,6 +19,21 @@ const ESPN_TO_NHL_MAP: Record<string, string> = {
   TB: 'TBL', SJ: 'SJS', LA: 'LAK', NJ: 'NJD',
 };
 
+const SEASON_END_DATES: Record<string, string> = {
+  '20252026': '2026-04-16',
+  '20242025': '2025-04-17',
+  '20232024': '2024-04-18',
+  '20222023': '2023-04-14',
+  '20212022': '2022-04-29',
+  '20202021': '2021-05-19',
+  '20192020': '2020-03-11',
+  '20182019': '2019-04-06',
+  '20172018': '2018-04-08',
+  '20162017': '2017-04-09',
+  '20152016': '2016-04-10',
+  '20142015': '2015-04-11',
+};
+
 async function getNextGamesData(asOfDate: string, teams: string[]) {
   const base = new Date(asOfDate + 'T00:00:00Z');
   const datesToFetch: string[] = [];
@@ -27,7 +42,7 @@ async function getNextGamesData(asOfDate: string, teams: string[]) {
     d.setUTCDate(d.getUTCDate() + i);
     datesToFetch.push(d.toISOString().split('T')[0]);
   }
-  
+
   const responses = await Promise.allSettled(datesToFetch.map(d => fetchScheduleRaw(d)));
   const allGames: any[] = [];
   for (const r of responses) {
@@ -35,7 +50,7 @@ async function getNextGamesData(asOfDate: string, teams: string[]) {
       allGames.push(...r.value);
     }
   }
-  
+
   allGames.sort((a, b) => a.date.localeCompare(b.date));
 
   const nextGamesMap: Record<string, any> = {};
@@ -55,10 +70,11 @@ async function getNextGamesData(asOfDate: string, teams: string[]) {
   return nextGamesMap;
 }
 
-async function getLast5GamesData(teams: string[]) {
+async function getLast5GamesData(teams: string[], season?: string, asOfDate?: string) {
   const result: Record<string, { last5: string[], last5Games: any[] }> = {};
+  const targetDate = asOfDate || new Date().toISOString().split('T')[0];
   await Promise.all(teams.map(async (abbrev) => {
-    result[abbrev] = await fetchTeamLast5(abbrev);
+    result[abbrev] = await fetchTeamLast5(abbrev, season, targetDate);
   }));
   return result;
 }
@@ -71,7 +87,7 @@ async function getAllScores(centerDate: string) {
     d.setUTCDate(d.getUTCDate() + offset);
     dates.push(d.toISOString().split('T')[0]);
   }
-  
+
   const results = await Promise.allSettled(dates.map((d) => fetchScheduleRaw(d)));
   const games: any[] = [];
   for (const r of results) {
@@ -85,18 +101,28 @@ async function getAllScores(centerDate: string) {
 app.get('/api/standings', async (req) => {
   const { date, season } = req.query as { date?: string, season?: string };
   const today = new Date().toISOString().split('T')[0];
-  let asOf = date || today;
-  if (asOf > today) asOf = today;
+  
+  const seasonEndDate = season ? SEASON_END_DATES[season] : undefined;
+  const isEndOfSeasonOrCurrent = !date || !seasonEndDate || date >= seasonEndDate || date >= today;
 
-  const cacheKey = `standings:${asOf}:v19`;
+  const cacheKey = isEndOfSeasonOrCurrent
+    ? `standings:${season || 'current'}:${date || 'today'}:v23`
+    : `standings:${season}:${date}:v23`;
 
   return cached(cacheKey, 60_000, async () => {
-    const rows = await fetchStandingsRaw(asOf);
+    let rows: any[];
+
+    if (isEndOfSeasonOrCurrent) {
+      rows = await fetchStandingsRaw(season);
+    } else {
+      rows = await fetchStandingsForDate(season!, date);
+    }
+
     const teams = rows.map((s: any) => s.team.abbrev);
-    
+
     const [nextGamesMap, last5Map] = await Promise.all([
-      cached(`next-games:${asOf}:v8`, 600_000, () => getNextGamesData(asOf, teams)),
-      cached(`last5-games:${asOf}:v5`, 60_000, () => getLast5GamesData(teams))
+      cached(`next-games:${date || today}:v8`, 600_000, () => getNextGamesData(date || today, teams)),
+      cached(`last5-games:${season || 'current'}:${date || today}:v8`, 60_000, () => getLast5GamesData(teams, season, date || today))
     ]);
 
     rows.forEach((r: any) => {
@@ -130,7 +156,7 @@ app.get('/api/news', async (req) => {
       const raw: any = await fetchEspnNews();
       const articles = raw?.articles || [];
       return articles.slice(0, 15).map((a: any) => ({
-        id: a.id, title: a.headline || '', description: a.description || '', 
+        id: a.id, title: a.headline || '', description: a.description || '',
         image: a.images?.[0]?.url, link: a.links?.web?.href || a.links?.api?.news?.href, published: a.published,
         translatedBy: 'none'
       }));
@@ -169,7 +195,7 @@ app.get('/api/injuries', async (req) => {
 
 app.get('/api/game/:id', async (req) => {
   const { id } = req.params as { id: string };
-  const cacheKey = `game-summary:${id}:v2`; // Сброс кэша
+  const cacheKey = `game-summary:${id}:v2`;
   return cached(cacheKey, 30_000, async () => {
     return await fetchGameSummary(id);
   });
@@ -186,7 +212,7 @@ app.get('/api/playoffs', async (req) => {
 app.get('/api/leaders', async (req) => {
   const { season } = req.query as { season?: string };
   const seasonKey = season || 'current';
-  return cached(`leaders:${seasonKey}:v7`, 300_000, async () => {
+  return cached(`leaders:${seasonKey}:v10`, 300_000, async () => {
     const [skaters, goalies] = await Promise.all([
       fetchSkaterLeaders(seasonKey),
       fetchGoalieLeaders(seasonKey),
