@@ -13,7 +13,7 @@ import { CalendarView } from './CalendarView'
 import { NewsView } from './NewsView'
 import { T, type Lang } from './i18n'
 
-const APP_VERSION = '1.4.0'
+const APP_VERSION = '1.4.1'
 
 const SEASONS = [
   { label: '2026-27', value: '20262027' },
@@ -477,3 +477,4 @@ export default function App() {
     </div>
   )
 }
+

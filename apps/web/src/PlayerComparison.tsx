@@ -64,7 +64,6 @@ export function PlayerComparison({ player1Data, t, onClose }: Props) {
       points: currentSeason.points ?? 0,
       plusMinus: currentSeason.plusMinus ?? 0,
       pim: currentSeason.pim ?? 0,
-      shots: currentSeason.shots ?? 0,
       wins: currentSeason.wins ?? 0,
       gaa: currentSeason.goalsAgainstAvg ?? 0,
       savePctg: currentSeason.savePctg ? Number(currentSeason.savePctg).toFixed(3) : '0.000',
@@ -242,11 +241,6 @@ export function PlayerComparison({ player1Data, t, onClose }: Props) {
                         <span style={statValueStyle((p2.plusMinus ?? 0) >= (p1?.plusMinus ?? 0))}>
                           {(p2.plusMinus ?? 0) > 0 ? `+${p2.plusMinus}` : (p2.plusMinus ?? 0)}
                         </span>
-                      </div>
-                      <div style={statRowStyle}>
-                        <span style={statValueStyle((p1?.shots ?? 0) >= (p2.shots ?? 0))}>{p1?.shots ?? 0}</span>
-                        <span style={statLabelStyle}>Броски</span>
-                        <span style={statValueStyle((p2.shots ?? 0) >= (p1?.shots ?? 0))}>{p2.shots ?? 0}</span>
                       </div>
                     </>
                   ) : (p1?.isGoalie && p2.isGoalie) ? (

@@ -104,7 +104,7 @@ function fmtPct(n?: number): string {
   return n.toFixed(3).replace(/^0/, '')
 }
 
-function StatBlock({ label, value }: { label: string; value: string }) {
+function StatBlock({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -112,7 +112,15 @@ function StatBlock({ label, value }: { label: string; value: string }) {
       border: '1px solid rgba(255,255,255,0.06)',
       borderRadius: 6, minWidth: 64,
     }}>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2, textTransform: 'uppercase', fontWeight: 600 }}>
+      <div 
+        title={tooltip}
+        style={{ 
+          fontSize: 11, color: 'var(--text-muted)', marginBottom: 2, textTransform: 'uppercase', fontWeight: 600,
+          textDecoration: tooltip ? 'underline dotted' : 'none',
+          textUnderlineOffset: '3px',
+          cursor: tooltip ? 'help' : 'default'
+        }}
+      >
         {label}
       </div>
       <div style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--accent)' }}>
@@ -126,6 +134,23 @@ function StatRow({
   title, stats, isG, t,
 }: { title: string; stats: StatLine | null; isG: boolean; t: Translation }) {
   if (!stats) return null
+  
+  const isRu = t.locale === 'ru-RU'
+  const tooltips = {
+    gp: isRu ? 'Игры' : 'Games Played',
+    goals: isRu ? 'Голы' : 'Goals',
+    assists: isRu ? 'Голевые передачи' : 'Assists',
+    points: isRu ? 'Очки (Голы + Передачи)' : 'Points (Goals + Assists)',
+    plusMinus: isRu ? 'Показатель плюс/минус' : 'Plus/Minus',
+    pim: isRu ? 'Штрафные минуты' : 'Penalty Minutes',
+    wins: isRu ? 'Победы' : 'Wins',
+    losses: isRu ? 'Поражения' : 'Losses',
+    otLosses: isRu ? 'Поражения в овертайме/по буллитам' : 'Overtime/Shootout Losses',
+    gaa: isRu ? 'Среднее количество пропущенных шайб за игру' : 'Goals Against Average',
+    savePctg: isRu ? 'Процент отраженных бросков' : 'Save Percentage',
+    shutouts: isRu ? 'Сухие игры (матчи без пропущенных шайб)' : 'Shutouts',
+  }
+
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{
@@ -135,23 +160,23 @@ function StatRow({
         {title}
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <StatBlock label={t.gp} value={fmt(stats.gp)} />
+        <StatBlock label={t.gp} value={fmt(stats.gp)} tooltip={tooltips.gp} />
         {isG ? (
           <>
-            <StatBlock label={t.winsStat} value={fmt(stats.wins)} />
-            <StatBlock label={t.lossesStat} value={fmt(stats.losses)} />
-            <StatBlock label={t.otLossesStat} value={fmt(stats.otLosses)} />
-            <StatBlock label={t.gaaStat} value={fmtGaa(stats.gaa)} />
-            <StatBlock label={t.savePctgStat} value={fmtPct(stats.savePctg)} />
-            <StatBlock label={t.shutoutsStat} value={fmt(stats.shutouts)} />
+            <StatBlock label={t.winsStat} value={fmt(stats.wins)} tooltip={tooltips.wins} />
+            <StatBlock label={t.lossesStat} value={fmt(stats.losses)} tooltip={tooltips.losses} />
+            <StatBlock label={t.otLossesStat} value={fmt(stats.otLosses)} tooltip={tooltips.otLosses} />
+            <StatBlock label={t.gaaStat} value={fmtGaa(stats.gaa)} tooltip={tooltips.gaa} />
+            <StatBlock label={t.savePctgStat} value={fmtPct(stats.savePctg)} tooltip={tooltips.savePctg} />
+            <StatBlock label={t.shutoutsStat} value={fmt(stats.shutouts)} tooltip={tooltips.shutouts} />
           </>
         ) : (
           <>
-            <StatBlock label={t.goalsCol} value={fmt(stats.goals)} />
-            <StatBlock label={t.assistsCol} value={fmt(stats.assists)} />
-            <StatBlock label={t.pointsCol} value={fmt(stats.points)} />
-            <StatBlock label={t.plusMinusCol} value={(stats.plusMinus ?? 0) > 0 ? '+' + stats.plusMinus : fmt(stats.plusMinus)} />
-            <StatBlock label={t.pimCol} value={fmt(stats.pim)} />
+            <StatBlock label={t.goalsCol} value={fmt(stats.goals)} tooltip={tooltips.goals} />
+            <StatBlock label={t.assistsCol} value={fmt(stats.assists)} tooltip={tooltips.assists} />
+            <StatBlock label={t.pointsCol} value={fmt(stats.points)} tooltip={tooltips.points} />
+            <StatBlock label={t.plusMinusCol} value={(stats.plusMinus ?? 0) > 0 ? '+' + stats.plusMinus : fmt(stats.plusMinus)} tooltip={tooltips.plusMinus} />
+            <StatBlock label={t.pimCol} value={fmt(stats.pim)} tooltip={tooltips.pim} />
           </>
         )}
       </div>
@@ -267,6 +292,8 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
     padding: 14,
   }
 
+  // Стили для заголовков таблицы с тултипами
+  const isRu = t.locale === 'ru-RU'
   const thStyle: React.CSSProperties = {
     padding: '6px 4px',
     textAlign: 'left',
@@ -275,6 +302,9 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
     textTransform: 'uppercase',
     fontWeight: 700,
     letterSpacing: '0.4px',
+    cursor: 'help',
+    textDecoration: 'underline dotted',
+    textUnderlineOffset: '3px',
   }
   const thRightStyle: React.CSSProperties = { ...thStyle, textAlign: 'right' }
 
@@ -446,23 +476,23 @@ export function PlayerCard({ playerId, t, onClose }: Props) {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                          <th style={thStyle}>{t.seasonWord}</th>
-                          <th style={thStyle}>{t.teamCol}</th>
-                          <th style={thRightStyle}>{t.gp}</th>
+                          <th style={thStyle} title={isRu ? 'Сезон' : 'Season'}>{t.seasonWord}</th>
+                          <th style={thStyle} title={isRu ? 'Команда' : 'Team'}>{t.teamCol}</th>
+                          <th style={thRightStyle} title={isRu ? 'Игры' : 'Games Played'}>{t.gp}</th>
                           {isG ? (
                             <>
-                              <th style={thRightStyle}>{t.winsStat}</th>
-                              <th style={thRightStyle}>{t.lossesStat}</th>
-                              <th style={thRightStyle}>{t.otLossesStat}</th>
-                              <th style={thRightStyle}>{t.gaaStat}</th>
-                              <th style={thRightStyle}>{t.savePctgStat}</th>
+                              <th style={thRightStyle} title={isRu ? 'Победы' : 'Wins'}>{t.winsStat}</th>
+                              <th style={thRightStyle} title={isRu ? 'Поражения' : 'Losses'}>{t.lossesStat}</th>
+                              <th style={thRightStyle} title={isRu ? 'Поражения в овертайме/по буллитам' : 'Overtime/Shootout Losses'}>{t.otLossesStat}</th>
+                              <th style={thRightStyle} title={isRu ? 'Среднее количество пропущенных шайб за игру' : 'Goals Against Average'}>{t.gaaStat}</th>
+                              <th style={thRightStyle} title={isRu ? 'Процент отраженных бросков' : 'Save Percentage'}>{t.savePctgStat}</th>
                             </>
                           ) : (
                             <>
-                              <th style={thRightStyle}>{t.goalsCol}</th>
-                              <th style={thRightStyle}>{t.assistsCol}</th>
-                              <th style={thRightStyle}>{t.pointsCol}</th>
-                              <th style={thRightStyle}>{t.plusMinusCol}</th>
+                              <th style={thRightStyle} title={isRu ? 'Голы' : 'Goals'}>{t.goalsCol}</th>
+                              <th style={thRightStyle} title={isRu ? 'Голевые передачи' : 'Assists'}>{t.assistsCol}</th>
+                              <th style={thRightStyle} title={isRu ? 'Очки (Голы + Передачи)' : 'Points (Goals + Assists)'}>{t.pointsCol}</th>
+                              <th style={thRightStyle} title={isRu ? 'Показатель плюс/минус' : 'Plus/Minus'}>{t.plusMinusCol}</th>
                             </>
                           )}
                         </tr>
