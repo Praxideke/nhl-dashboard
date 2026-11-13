@@ -1,3 +1,7 @@
+<img width="1029" height="961" alt="player" src="https://github.com/user-attachments/assets/06f6d2e5-9c8b-4bbf-ab7a-d466eef8997c" />
+<img width="1813" height="901" alt="details" src="https://github.com/user-attachments/assets/a548a95a-db4d-468d-bffe-b5d337954f01" />
+<img width="1920" height="1040" alt="leaders" src="https://github.com/user-attachments/assets/6269791c-662b-4079-9f22-b89136fe159f" />
+<img width="1920" height="1040" alt="main" src="https://github.com/user-attachments/assets/0e53e3e1-9503-4359-b36f-0106d3fc1337" />
 # NHL Stats
 
 Десктопное приложение с полной статистикой NHL: турнирная таблица, матчи, плей-офф, лидеры, карточки команд и игроков.
